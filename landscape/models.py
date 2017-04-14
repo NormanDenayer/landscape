@@ -12,11 +12,15 @@ class Feed(db.Model):
     created_on = db.Column('registered_on', db.DateTime)
     last_update = db.Column('last_update', db.DateTime)
 
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
+
 
 class Link(db.Model):
     __tablename__ = 'links'
     id = db.Column('link_id', db.Integer, primary_key=True)
     uri = db.Column('uri', db.String(10000))
+
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
 
 
 class User(db.Model):

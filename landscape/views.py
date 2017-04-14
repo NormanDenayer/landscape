@@ -1,7 +1,7 @@
 from landscape import app, db
 from landscape.models import User
 from flask import request, render_template, redirect, url_for, flash
-from flask.ext.login import login_user, login_required
+from flask_login import login_user, login_required
 
 
 @app.route('/', methods=['GET'])

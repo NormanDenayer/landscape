@@ -2,5 +2,6 @@ setuptools
 flask
 flask-sqlalchemy
 flask-login
+flask-migrate
 psycopg2
 
