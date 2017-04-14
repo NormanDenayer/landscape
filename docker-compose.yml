@@ -1,0 +1,45 @@
+version: '2.1'
+
+volumes:
+  # We'll define a volume that will store the data from the postgres databases:
+  postgres-data:
+    driver: local
+
+services:
+  web:
+    build: .
+    ports:
+     - 5000:5000
+    command: flask run -h 0.0.0.0 -p 5000
+    volumes:
+     - .:/landscape
+    links:
+      # We'll include a link to the 'db' (postgres) container, making it visible from the container
+      # using the 'db..local' hostname
+      - postgres:db.local
+    environment:
+      # The postgres database URL:
+      DATABASE_URL: postgres://postgres:3x4mpl3@db.local:5432/landscape
+      APP_SETTINGS: config_prod
+      FLASK_APP: landscape
+      PYTHONPATH: /landscape
+
+  postgres:
+    image: "postgres:alpine"
+    ports:
+      # We'll bind our host's port 5432 to postgres's port 5432, so we can use
+      # our database IDEs with it (to be commented in prod):
+      - 5432:5432
+    volumes:
+      # Mount the DB dumps folder into the container, to be able to create & access database dumps:
+      - ./db/dumps:/db/dumps
+      # Mount out tmp folder, we might want to have access to something there during development:
+      - ./tmp:/tmp
+      # Mount our 'restoredb' script:
+      - ./bin/restoredb:/bin/restoredb:ro
+      # Mount our 'dumpdb' script:
+      - ./bin/dumpdb:/bin/dumpdb:ro
+      # We'll mount the 'postgres-data' volume into the location Postgres stores it's data:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: 3x4mpl3
