@@ -1,26 +1,36 @@
-from datetime import datetime
+import enum
+import hashlib
 
 from landscape import db
+from sqlalchemy.sql import func
 
 
-class Feed(db.Model):
-    __tablename__ = 'feeds'
-    id = db.Column('feed_id', db.Integer, primary_key=True)
-    uri = db.Column('uri', db.String(10000), unique=True)
-    frequency = db.Column('frequency', db.Integer)
-    content = db.Column('content', db.Text)
-    created_on = db.Column('registered_on', db.DateTime)
-    last_update = db.Column('last_update', db.DateTime)
-
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
+class WidgetType(enum.Enum):
+    FEED = 1
+    LINK = 2
+    TODO = 3
 
 
-class Link(db.Model):
-    __tablename__ = 'links'
-    id = db.Column('link_id', db.Integer, primary_key=True)
+class Widget(db.Model):
+    __tablename__ = 'widgets'
+    id = db.Column('widget_id', db.Integer, primary_key=True)
+    type = db.Column('type', db.Enum(WidgetType))
     uri = db.Column('uri', db.String(10000))
+    content = db.Column('content', db.Text)
+    refresh_freq = db.Column('refresh_freq', db.Integer, default=10)
+
+    x = db.Column('x', db.Integer, default=0)
+    y = db.Column('y', db.Integer, default=0)
+    height = db.Column('height', db.Integer)
+    width = db.Column('width', db.Integer)
+
+    created_on = db.Column('created_on', db.DateTime, server_default=func.now())
+    updated_on = db.Column('updated_on', db.DateTime, onupdate=func.now())
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
+
+    def __repr__(self):
+        return '<Widget.%r >' % self.type
 
 
 class User(db.Model):
@@ -29,19 +39,21 @@ class User(db.Model):
     username = db.Column('username', db.String(80), unique=True, index=True)
     email = db.Column('email', db.String(120), unique=True, index=True)
     password = db.Column('password', db.String(255))
-    registered_on = db.Column('registered_on', db.DateTime)
+    registered_on = db.Column('registered_on', db.DateTime, server_default=func.now())
 
-    feeds = db.relationship('Feed', backref='user', lazy='dynamic')
-    links = db.relationship('Link', backref='user', lazy='dynamic')
+    widgets = db.relationship('Widget', backref='user', lazy='dynamic')
 
-    def __init__(self, username, password, email):
+    def __init__(self, username, email, password):
         self.username = username
-        self.password = password
         self.email = email
-        self.registered_on = datetime.utcnow()
+        self.password = User.encode_password(password)
 
     def __repr__(self):
         return '<User %r>' % self.username
+
+    @staticmethod
+    def encode_password(password):
+        return hashlib.sha512(password.encode()).hexdigest()
 
     def is_authenticated(self):
         return True
