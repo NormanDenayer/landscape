@@ -10,13 +10,23 @@ def index():
     return 'Hello World!'
 
 
-@app.route('/widgets', methods=['GET'])
+@app.route('/user/<user_id>/widgets', methods=['GET', 'CREATE'])
 @login_required
-def widgets():
-    return render_template('widgets.html')
+def widgets(user_id):
+    if request.accept_mimetypes.accept_html:
+        return render_template('widgets.html')
+    # todo: return the widgets configured (if GET)
+    # todo: create a new widget (if CREATE)
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/user/<user_id>/widget/<widget_id>', methods=['GET', 'DELETE'])
+@login_required
+def widget(user_id, widget_id):
+    # todo: return widget details or delete the widget
+    pass
+
+
+@app.route('/knock-knock', methods=['GET', 'POST'])
 def login():
     if request.method == 'GET':
         return render_template('login.html')
@@ -28,7 +38,7 @@ def login():
         return redirect(url_for('login'))
     login_user(registered_user)
     flash('Logged in successfully', 'success')
-    return redirect(request.args.get('next') or url_for('index'))
+    return redirect(request.args.get('next') or url_for('widgets', user_id=registered_user.id))
 
 
 @app.route('/register', methods=['GET', 'POST'])
