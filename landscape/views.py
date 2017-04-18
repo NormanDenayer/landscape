@@ -10,10 +10,10 @@ def index():
     return 'Hello World!'
 
 
-@app.route('/secured', methods=['GET'])
+@app.route('/widgets', methods=['GET'])
 @login_required
-def secured():
-    return 'This is secured'
+def widgets():
+    return render_template('widgets.html')
 
 
 @app.route('/login', methods=['GET', 'POST'])
