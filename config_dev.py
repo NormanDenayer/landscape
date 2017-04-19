@@ -19,3 +19,4 @@ THREADS_PER_PAGE = 2
 
 # Secret key for signing cookies
 SECRET_KEY = "secret"
+LOG_PATH = '/tmp/landscape.log'
