@@ -14,7 +14,7 @@ class WidgetType(enum.Enum):
 class Widget(db.Model):
     __tablename__ = 'widgets'
     id = db.Column('widget_id', db.Integer, primary_key=True)
-    type = db.Column('type', db.Enum(WidgetType))
+    type = db.Column('type', db.Enum(WidgetType), nullable=False)
     uri = db.Column('uri', db.String(10000))
     content = db.Column('content', db.Text)
     refresh_freq = db.Column('refresh_freq', db.Integer, default=10)
@@ -29,8 +29,45 @@ class Widget(db.Model):
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
 
+    def __init__(self, type, user_id, uri=None, refresh_freq=None, x=None, y=None, height=None, width=None):
+        self.type = type
+        self.uri = uri
+        self.refresh_freq = refresh_freq
+        self.x = x
+        self.y = y
+        self.height = height
+        self.width = width
+        self.user_id = user_id
+
     def __repr__(self):
-        return '<Widget.%r >' % self.type
+        return f'<Widget.{self.type} for user {self.user_id}>'
+
+    def to_dict(self, limited=False):
+        entry = {
+            'id': self.id,
+            'type': self.type,
+            'uri': self.uri,
+            'x': self.x,
+            'y': self.y,
+            'height': self.height,
+            'width': self.width,
+        }
+        if not limited:
+            entry.update({
+                'content': self.content,
+                'refresh_freq': self.refresh_freq,
+            })
+        return entry
+
+    @staticmethod
+    def new_coordinates(user_id):
+        widgets = Widget.query.filter(user_id=user_id)
+        next_y = max(widgets, key=lambda widget:widget.y) if widgets else 0
+
+        return {
+            'x': 0, 'y': next_y + 1,
+            'height': 3, 'width': 5,
+        }
 
 
 class User(db.Model):
