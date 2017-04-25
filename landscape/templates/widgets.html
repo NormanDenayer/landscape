@@ -7,7 +7,20 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/0.2.6/gridstack.min.js"></script>
 
     <style type="text/css">
+        .panel-heading {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: normal;
+        }
+        .panel-body p {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: normal;
 
+            font-size: 14px;
+        }
     </style>
 {% endblock %}
 
@@ -48,13 +61,13 @@
                   <div class="form-group">
                     <label for="title" class="control-label col-sm-2">Title:</label>
                     <div class="col-sm-10">
-                      <input type="text" class="form-control col-sm-10" name="title">
+                      <input type="text" class="form-control col-sm-10" name="title" placeholder="Title (optional)">
                     </div>
                   </div>
                   <div class="form-group">
                     <label for="url" class="control-label col-sm-2">Url:</label>
                     <div class="col-sm-10">
-                      <input type="text" class="form-control col-sm-10" name="url">
+                      <input type="text" class="form-control col-sm-10" name="url" placeholder="Url">
                     </div>
                   </div>
                 </form>
@@ -71,18 +84,18 @@
 
     <script type="text/javascript">
         $(function () {
+
             var renderFeed = function(node) {
-                var rend = '<div class="panel-heading"><h3 class="panel-title">' + node.data.title + '<button type="button" class="close"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button></h3></div>';
-                rend += '<div class="panel-body">';
-                _.each(node.data.items, function(item) {
-                    rend += '<div class="row"><div class="span4">';
-                    if(item.image) {
-                        rend += '<img style="float:left" width="80" align="left" hspace="2" vspace="2" src="' + item.image + '"/>';
+                var rend = '<div class="panel-body">';
+                _.each(node.items, function(item) {
+                    rend += '<div class="row"><div class="span4"><p>';
+                    if(item.picture) {
+                        rend += '<img style="float:left" width="40" align="left" hspace="2" vspace="2" src="' + item.picture + '"/>';
                     }
                     if(item.read) {
                         rend += '<del>';
                     }
-                    rend += '<p><a href="' + item.uri + '" target="blank">' + item.title + '</a></p>';
+                    rend += '<a href="' + item.link + '" target="blank" rel="popover" data-content="" data-trigger="hover">' + item.title + '</a></p>';
                     if(item.read) {
                         rend += '</del>';
                     }
@@ -92,10 +105,21 @@
                 return rend;
             };
 
+            var renderWidget = function(node) {
+                let rend = '<div class="panel panel-info grid-stack-item-content"><div class="panel-heading"><h3 class="panel-title">' + node.title + '<button type="button" class="close"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button></h3></div>';
+                rend += '<div class="panel-body">';
+                switch (node.type) {
+                    case 1: rend += renderFeed(node.content);
+                }
+                rend += '</div></div>';
+                return rend;
+            };
+
             var options = {};
             $('.grid-stack').gridstack(options);
 
             new function () {
+                this.gridData = [];
                 this.serializedData = [
                     {id:0, x: 0, y: 0, width: 2, height: 2, type: 'feed', data: {title: "lesoir", items: [
                         {uri: "http://google.com", title: "google", image: "https://opensource.com/sites/default/files/images/business/pixelated-world.png"},
@@ -107,20 +131,43 @@
 
                 this.grid = $('.grid-stack').data('gridstack');
 
-                this.loadGrid = function () {
+                this.renderGrid = function(widgets) {
                     this.grid.removeAll();
-                    var items = GridStackUI.Utils.sort(this.serializedData);
+                    var items = GridStackUI.Utils.sort(widgets);
                     _.each(items, function (node) {
-
-                        var content = '<div class="grid-stack-item" id="' + node.id + '"><div class="panel panel-info grid-stack-item-content">';
-                        switch (node.type) {
-                            case 'feed': content += renderFeed(node);
-                        }
-                        content += '</div></div>';
-
+                        var content = '<div class="grid-stack-item" id="' + node.id + '"></div>';
                         this.grid.addWidget($(content), node.x, node.y, node.width, node.height, true, null, null, null, null, node.id);
                     }.bind(this));
-                    return false;
+                };
+
+                this.loadGrid = function () {
+                    $.ajax({
+                        url: "{{ url_for('api_widgets', user_id=user_id) }}",
+                        method: 'GET',
+                        context: this,
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json'
+                    }).done(function(resp) {
+                        this.renderGrid(resp.widgets);
+                        this.gridData = resp.widgets;
+                        $('.a')
+                    }.bind(this));
+                };
+
+                this.refreshGrid = function() {
+                    console.log('refreshing');
+                    for(var i=0;i<this.gridData.length;i++) {
+                        let e = this.gridData[i];
+                        $.ajax({
+                            url: this.gridData[i].url,
+                            method: 'GET',
+                            serverType: 'json'
+                        }).done(function(resp){
+                            console.log(e);
+                            $('#' + e.id).html(renderWidget(resp.widget));
+                        }.bind(e));
+                    }
+                    setTimeout(this.refreshGrid, 60 * 1000);
                 }.bind(this);
 
                 this.saveGrid = function () {
@@ -145,7 +192,7 @@
 
                 this.addWidget = function () {
                     $.ajax({
-                        url: window.location.href,
+                        url: "{{ url_for('api_widgets', user_id=user_id) }}",
                         method: "CREATE",
                         dataType: 'json',
                         context: this,
@@ -154,7 +201,8 @@
                         console.log(resp);
                         var node = resp.widget;
                         $('#newWidget').modal('hide');
-                        this.grid.addWidget('', node.x, node.y, node.width, node.height, true, null, null, null, null, node.id);
+                        this.gridData.push(node);
+                        this.renderGrid(this.gridData);
                     }.bind(this)).fail(function(xhr, status, error) {
                         console.log("widget creation failed")
                     });
@@ -164,16 +212,18 @@
                     e.preventDefault();
                     var el = $(this).closest('.grid-stack-item');
                     $.ajax({
-                        url: window.location.href + '/grid/' + el.data('_gridstack_node').id,
+                        url: "{{ url_for('api_widget', user_id=user_id, widget_id=0)[:-1] }}" + el.data('_gridstack_node').id,
                         method: 'DELETE'
+                    }).done(function() {
+                        $('.grid-stack').data('gridstack').removeWidget(el);
                     });
-                    $('.grid-stack').data('gridstack').removeWidget(el);
                 });
 
                 $('#submit-new-widget').click(this.addWidget);
                 $('#save-grid').click(this.saveGrid);
 
                 this.loadGrid();
+                setTimeout(this.refreshGrid, 200);
             };
         });
     </script>
