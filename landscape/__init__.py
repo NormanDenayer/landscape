@@ -13,7 +13,7 @@ from flask_migrate import Migrate
 
 from logging.handlers import RotatingFileHandler
 
-app = Flask(__name__)
+app = Flask(__name__, '/static/')
 app.config.from_object(os.environ['APP_SETTINGS'])
 
 # configure the database

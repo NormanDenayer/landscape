@@ -1,6 +1,6 @@
 import requests
 import json
-from itertools import chain
+import re
 from landscape import app, db
 from landscape.models import Widget, WidgetType
 
@@ -26,6 +26,13 @@ def refresh_feed(widget):
             if 'image' in link.get('type', ''):
                 picture = link.get('href', link.get('url', ''))
                 break
+        # else:
+        #     if 'content' in item:
+        #         for c in item.content:
+        #             m = re.search(r'<img.* src="(.+)".+ />', c.value)
+        #             if m is not None:
+        #                 picture = m.groups()[0]
+        #                 break
 
         i = {
             'description': item.description,

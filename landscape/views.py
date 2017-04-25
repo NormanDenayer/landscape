@@ -1,11 +1,15 @@
 from landscape import app, db
 from landscape.models import User, WidgetType, Widget
 
-from flask import request, render_template, redirect, url_for, flash, session, abort
-from flask_login import login_user, login_required
+from flask import request, render_template, redirect, url_for, flash, session, abort, send_from_directory
+from flask_login import login_user, login_required, current_user
 from flask.json import jsonify
 from sqlalchemy.sql import or_
 
+
+@app.route('/static/<path:filename>')
+def download_file(filename):
+    return send_from_directory(app.config['STATIC_FOLDER'], filename, as_attachment=True)
 
 @app.route('/', methods=['GET'])
 def index():
@@ -17,7 +21,7 @@ def index():
 def widgets(user_id):
     if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
         return abort(status=403)
-    return render_template('widgets.html', widget_types=[(t.value, t.name) for t in WidgetType], user_id=user_id)
+    return render_template('widgets.html', widget_types=[(t.value, t.name) for t in WidgetType], user=current_user)
 
 
 @app.route('/api/v01/user/<user_id>/widgets', methods=['GET', 'CREATE'], endpoint='api_widgets')

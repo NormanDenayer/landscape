@@ -7,6 +7,11 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/0.2.6/gridstack.min.js"></script>
 
     <style type="text/css">
+        body {
+            background-image: url("/static/pics/{{ user.username }}.jpg");
+            background-repeat: no-repeat;
+            background-size: cover;
+        }
         .panel-heading {
             white-space: nowrap;
             overflow: hidden;
@@ -16,10 +21,14 @@
         .panel-body p {
             white-space: nowrap;
             overflow: hidden;
+            overflow-y: scroll;
             text-overflow: ellipsis;
             line-height: normal;
 
             font-size: 14px;
+        }
+        .popover-data-content {
+            display: none;
         }
     </style>
 {% endblock %}
@@ -84,21 +93,25 @@
 
     <script type="text/javascript">
         $(function () {
-
             var renderFeed = function(node) {
                 var rend = '<div class="panel-body">';
                 _.each(node.items, function(item) {
                     rend += '<div class="row"><div class="span4"><p>';
+                    var description = '<div class="media">';
                     if(item.picture) {
                         rend += '<img style="float:left" width="40" align="left" hspace="2" vspace="2" src="' + item.picture + '"/>';
+                        description += '<img style="float:left" width="100" align="left" hspace="2" vspace="2" src="' + item.picture + '"/>';
                     }
+                    description += '<p>' + item.description + '</p><a href="' + item.link + '" target="_blank">Link</a></div>';
                     if(item.read) {
                         rend += '<del>';
                     }
-                    rend += '<a href="' + item.link + '" target="blank" rel="popover" data-content="" data-trigger="hover">' + item.title + '</a></p>';
+                    rend += '<a href="#" title="' + item.title + '" data-toggle="popover">' + item.title + '</a>';
                     if(item.read) {
-                        rend += '</del>';
+                        rend += '</del></p>';
                     }
+
+                    rend += '<div class="popover-data-content">' + description + '</div>';
                     rend += '</div></div>';
                 });
                 rend += '</div>';
@@ -120,14 +133,7 @@
 
             new function () {
                 this.gridData = [];
-                this.serializedData = [
-                    {id:0, x: 0, y: 0, width: 2, height: 2, type: 'feed', data: {title: "lesoir", items: [
-                        {uri: "http://google.com", title: "google", image: "https://opensource.com/sites/default/files/images/business/pixelated-world.png"},
-                        {uri: "http://google.com", title: "google"}]}},
-                    {id:1, x: 3, y: 1, width: 1, height: 2, type: 'feed', data: {title: "foo", items: []}},
-                    {id:2, x: 4, y: 1, width: 1, height: 1},
-                    {id:3, x: 2, y: 3, width: 3, height: 1}
-                ];
+                this.serializedData = [];
 
                 this.grid = $('.grid-stack').data('gridstack');
 
@@ -142,7 +148,7 @@
 
                 this.loadGrid = function () {
                     $.ajax({
-                        url: "{{ url_for('api_widgets', user_id=user_id) }}",
+                        url: "{{ url_for('api_widgets', user_id=user.id) }}",
                         method: 'GET',
                         context: this,
                         contentType: 'application/json; charset=utf-8',
@@ -165,6 +171,16 @@
                         }).done(function(resp){
                             console.log(e);
                             $('#' + e.id).html(renderWidget(resp.widget));
+                            popoverOptions = {
+                                content: function() {
+                                    let desc = $(this).parent().siblings('.popover-data-content').html();
+                                    return desc;
+                                },
+                                container: 'body',
+                                placement: 'bottom',
+                                html: true
+                            };
+                            $('[data-toggle="popover"]').popover(popoverOptions);
                         }.bind(e));
                     }
                     setTimeout(this.refreshGrid, 60 * 1000);
@@ -192,7 +208,7 @@
 
                 this.addWidget = function () {
                     $.ajax({
-                        url: "{{ url_for('api_widgets', user_id=user_id) }}",
+                        url: "{{ url_for('api_widgets', user_id=user.id) }}",
                         method: "CREATE",
                         dataType: 'json',
                         context: this,
@@ -208,11 +224,22 @@
                     });
                 }.bind(this);
 
+                $(document).on('click', function (e) {
+                    $('[data-toggle="popover"],[data-original-title]').each(function () {
+                        //the 'is' for buttons that trigger popups
+                        //the 'has' for icons within a button that triggers a popup
+                        if (!$(this).is(e.target) && $(this).has(e.target).length === 0 && $('.popover').has(e.target).length === 0) {
+                            (($(this).popover('hide').data('bs.popover')||{}).inState||{}).click = false  // fix for BS 3.3.6
+                        }
+
+                    });
+                });
+
                 $('body').on('click', '.close', function (e) {
                     e.preventDefault();
                     var el = $(this).closest('.grid-stack-item');
                     $.ajax({
-                        url: "{{ url_for('api_widget', user_id=user_id, widget_id=0)[:-1] }}" + el.data('_gridstack_node').id,
+                        url: "{{ url_for('api_widget', user_id=user.id, widget_id=0)[:-1] }}" + el.data('_gridstack_node').id,
                         method: 'DELETE'
                     }).done(function() {
                         $('.grid-stack').data('gridstack').removeWidget(el);
