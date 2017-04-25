@@ -1,5 +1,6 @@
 import requests
 import json
+import time
 from lxml import html, etree
 from landscape import app, db
 from landscape.models import Widget, WidgetType
@@ -52,10 +53,11 @@ def refresh_feed(widget):
         #                 break
 
         i = {
-            'description': limit_html_description(item.description, 60),
+            'description': limit_html_description(item.description, 100),
             'link': item.link,
             'title': item.title,
-            'picture': picture
+            'picture': picture,
+            'at': time.strftime('%D %H:%M', item.published_parsed) if 'published_parsed' in item.keys() else None,
         }
         content.append(i)
     if not widget.title:
