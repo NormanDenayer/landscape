@@ -1,6 +1,6 @@
 import requests
 import json
-import re
+from lxml import html, etree
 from landscape import app, db
 from landscape.models import Widget, WidgetType
 
@@ -8,6 +8,23 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import feedparser
 
 logger = app.logger
+
+
+def limit_html_description(text, limit):
+    try:
+        node = html.fromstring(text)
+    except etree.ParseError:
+        return text[:limit]
+    text_len = 0
+    result = ''
+    for subnode in node.iter():
+        if subnode.text is not None:
+            text_len += len(subnode.text.split(' '))
+            result += subnode.text
+        if text_len > limit:
+            result = ' '.join(result.split(' ')[:limit]) + '...'
+            break
+    return result
 
 
 def refresh_feed(widget):
@@ -35,7 +52,7 @@ def refresh_feed(widget):
         #                 break
 
         i = {
-            'description': item.description,
+            'description': limit_html_description(item.description, 60),
             'link': item.link,
             'title': item.title,
             'picture': picture

@@ -94,7 +94,7 @@
     <script type="text/javascript">
         $(function () {
             var renderFeed = function(node) {
-                var rend = '<div class="panel-body">';
+                var rend = '<div class="container">';
                 _.each(node.items, function(item) {
                     rend += '<div class="row"><div class="span4"><p>';
                     var description = '<div class="media">';
@@ -170,6 +170,12 @@
                             serverType: 'json'
                         }).done(function(resp){
                             console.log(e);
+                            $('[data-toggle="popover"]').each(function () {
+                                if (!$(this).is(e.target) && $(this).has(e.target).length === 0 && $('.popover').has(e.target).length === 0) {
+                                    (($(this).popover('hide').data('bs.popover')||{}).inState||{}).click = false  // fix for BS 3.3.6
+                                }
+
+                            });
                             $('#' + e.id).html(renderWidget(resp.widget));
                             popoverOptions = {
                                 content: function() {
@@ -180,7 +186,9 @@
                                 placement: 'bottom',
                                 html: true
                             };
-                            $('[data-toggle="popover"]').popover(popoverOptions);
+                            $('[data-toggle="popover"]').on('click',function(e){
+                              e.preventDefault();
+                            }).popover(popoverOptions);
                         }.bind(e));
                     }
                     setTimeout(this.refreshGrid, 60 * 1000);
@@ -224,10 +232,9 @@
                     });
                 }.bind(this);
 
-                $(document).on('click', function (e) {
-                    $('[data-toggle="popover"],[data-original-title]').each(function () {
-                        //the 'is' for buttons that trigger popups
-                        //the 'has' for icons within a button that triggers a popup
+                var body = $('body');
+                body.on('click', function (e) {
+                    $('[data-toggle="popover"]').each(function () {
                         if (!$(this).is(e.target) && $(this).has(e.target).length === 0 && $('.popover').has(e.target).length === 0) {
                             (($(this).popover('hide').data('bs.popover')||{}).inState||{}).click = false  // fix for BS 3.3.6
                         }
@@ -235,7 +242,7 @@
                     });
                 });
 
-                $('body').on('click', '.close', function (e) {
+                body.on('click', '.close', function (e) {
                     e.preventDefault();
                     var el = $(this).closest('.grid-stack-item');
                     $.ajax({
