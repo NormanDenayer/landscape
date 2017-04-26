@@ -7,9 +7,11 @@ from flask.json import jsonify
 from sqlalchemy.sql import or_
 
 
-@app.route('/static/<path:filename>')
-def download_file(filename):
-    return send_from_directory(app.config['STATIC_FOLDER'], filename, as_attachment=True)
+if app.config.get('DEBUG', False) is True:
+    @app.route('/static/<path:filename>')
+    def static_file(filename):
+        return send_from_directory(app.config['STATIC_FOLDER'], filename, as_attachment=True)
+
 
 @app.route('/', methods=['GET'])
 def index():
