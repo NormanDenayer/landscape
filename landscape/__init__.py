@@ -35,6 +35,13 @@ logger = logging.getLogger('werkzeug')
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
+
+@app.after_request
+def no_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 import landscape.controller
 import landscape.views
 import landscape.tasks
