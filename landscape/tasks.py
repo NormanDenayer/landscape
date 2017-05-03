@@ -84,5 +84,5 @@ def refresh_widgets():
 def running_jobs():
     sched = BackgroundScheduler()
     sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
-    sched.start()
+    # sched.start()
     logger.info('background jobs started')

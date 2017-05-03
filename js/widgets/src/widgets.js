@@ -1,5 +1,6 @@
+import "babel-polyfill";
 import React, { Component } from 'react';
-import {Panel, ListGroup, ListGroupItem} from 'react-bootstrap';
+import {Panel, Popover, OverlayTrigger} from 'react-bootstrap';
 import './App.css';
 import '../node_modules/react-grid-layout/css/styles.css';
 import '../node_modules/react-resizable/css/styles.css';
@@ -8,8 +9,8 @@ import $ from 'jquery';
 import ResponsiveReactGridLayout from 'react-grid-layout';
 
 class Widget extends Component {
-  constructor() {
-      super();
+  constructor(props) {
+      super(props);
       this.state = {dirty: false, content: undefined};
       this._loadContent = this._loadContent.bind(this);
   }
@@ -20,20 +21,61 @@ class Widget extends Component {
           servercontentType: 'json',
           context: this
       }).done(function(resp) {
-
+          console.log(resp);
+          this.setState({
+              content: {
+                  title: resp.widget.content.channel.title,
+                  items: resp.widget.content.items,
+              },
+          });
+          setTimeout(this._loadContent, 60000);
       }).fail(function() {
-
+          console.log('fail to fetch: ' + this.props.data.url);
+          setTimeout(this._loadContent, 60000);
       });
   }
+  componentDidMount() {
+      this._loadContent();
+  }
   render() {
+      if(this.state.content === undefined) {
+          return (<div className="container-fluid" style={{height: "inherit"}}>
+              <Panel header='*none*' bsStyle="info">
+                  <div className="container-fluid">
+                  </div>
+              </Panel>
+          </div>);
+      }
+
       return (<div className="container-fluid" style={{height: "inherit"}}>
-          <Panel header="Panel heading" bsStyle="info">
-              <div className="container-fluid">
-                  <div className="row"><div className="span4"> <p>item1</p></div></div>
-                  <div className="row"><div className="span4"> <p>item2</p></div></div>
-                  <div className="row"><div className="span4"> <p>item3</p></div></div>
-                  <div className="row"><div className="span4"> <p>item4</p></div></div>
-                  <div className="row"><div className="span4"> <p>item5</p></div></div>
+          <Panel header={this.state.content.title} bsStyle="info">
+              <div className="container-fluid" onMouseDown={ e => e.stopPropagation() }>
+                  {this.state.content.items.map((item) => {
+                      let image = '';
+                      let image_desc = '';
+
+                      if(item.picture) {
+                        image = <img style={{float:"left"}} width="40" align="left" hspace="2" vspace="2" src={item.picture} alt="" />;
+                        image_desc = <img style={{float:"left"}} width="100" align="left" hspace="2" vspace="2" src={item.picture} alt="" />;
+                      }
+                      let description = (<div className="media">
+                          {image_desc}
+                          <p>{item.description}</p>
+                          <p>Published at: {item.at}</p>
+                        </div>);
+
+                      let popover = <Popover title={item.title}>{description}</Popover>;
+                      return (<div className="row">
+                        <div className="span4">
+                            <p>
+                                {image}
+                                <OverlayTrigger trigger={['hover', 'focus']} placement="bottom" overlay={popover}>
+                                    <a href={item.link} target="_blank">{item.title}</a>
+                                </OverlayTrigger>
+                            </p>
+                        </div>
+                      </div>);
+                  })};
               </div>
           </Panel>
       </div>)
@@ -41,34 +83,35 @@ class Widget extends Component {
 }
 
 class Widgets extends Component {
-  constructor() {
-      super();
+  constructor(props) {
+      super(props);
       this.state = {widgets: []};
       this.loadGrid = this.loadGrid.bind(this);
       this.onRemoveItem = this.onRemoveItem.bind(this);
       this.createElement = this.createElement.bind(this);
   }
   componentDidMount() {
-      this.loadGrid()
+      this.loadGrid();
   }
   loadGrid() {
       $.ajax({
           url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
           method:'GET',
-          servercontentTypee: 'json',
+          servercontentType: 'json',
           context: this
       }).done(function(resp){
           console.log(resp);
-          this.setState({widgets: resp.widgets})
-      }).fail( function(){
+          this.setState({widgets: resp.widgets.map((w) => {w.w = w.width; w.h = w.height; return w;})})
+      }.bind(this)).fail(function(){
           let fakeConfig = {"widgets":[{"h":3,"id":1,"type":1,"url":"/api/v01/user/1/widget/1","w":5,"x":1,"y":0},{"h":3,"id":2,"type":1,"url":"/api/v01/user/1/widget/2","w":5,"x":0,"y":4},{"h":3,"id":3,"type":1,"url":"/api/v01/user/1/widget/3","w":5,"x":0,"y":8},{"h":3,"id":4,"type":1,"url":"/api/v01/user/1/widget/4","w":5,"x":0,"y":12},{"h":3,"id":5,"type":1,"url":"/api/v01/user/1/widget/5","w":5,"x":0,"y":16},{"h":3,"id":6,"type":1,"url":"/api/v01/user/1/widget/6","w":5,"x":0,"y":20}]};
           this.setState({widgets: fakeConfig.widgets})
-      });
+      }.bind(this));
   }
   onRemoveItem(e) {
       //todo:
   }
   createElement(e) {
+      console.log(e);
       return <div className="container-fluid" key={e.id} data-grid={{x: e.x, y: e.y, w: e.w, h: e.h}}>
           <Widget data={e} />
       </div>
@@ -80,11 +123,6 @@ class Widgets extends Component {
       e.preventDefault()
   }
   render() {
-    let layout = [
-      {i: 'a', x: 0, y: 0, w: 1, h: 2, static: true},
-      {i: 'b', x: 1, y: 0, w: 3, h: 2, minW: 2, maxW: 4},
-      {i: 'c', x: 4, y: 0, w: 1, h: 2}
-    ];
     return (
         <div className="container">
           <button className="btn btn-primary" onClick={this.onAddItem}>Add Item</button>

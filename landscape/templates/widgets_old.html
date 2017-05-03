@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block extra_scripts %}
+    <style type="text/css">
+        body {
+            background-image: url("/static/pics/{{ user.username }}.jpg");
+            background-repeat: no-repeat;
+            background-size: cover;
+        }
+        .panel-heading {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: normal;
+        }
+        .panel-body p {
+            white-space: nowrap;
+            overflow: hidden;
+            overflow-y: scroll;
+            text-overflow: ellipsis;
+            line-height: normal;
+
+            font-size: 14px;
+        }
+        .popover-data-content {
+            display: none;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <div id="">
+        <hr />
+        <div class="grid-stack"></div>
+        <hr />
+        <div>
+            <a class="btn btn-default" id="save-grid" href="#">
+                Save Grid Config
+            </a>
+            <a class="btn btn-default" data-toggle="modal" data-target="#newWidget">
+              Add widget
+            </a>
+        </div>
+
+        <!-- Modal -->
+        <div class="modal fade" id="newWidget" tabindex="-1" role="dialog" aria-labelledby="newWidgetLabel">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="newWidgetLabel">Add a widget</h4>
+              </div>
+              <div class="modal-body">
+                <form class="form-horizontal" id="newWidgetForm">
+                  <div class="form-group">
+                    <label for="type" class="control-label col-sm-2">Type:</label>
+                    <div class="col-sm-10">
+                      <select class="form-control" name="type">
+                          {% for value, name in widget_types %}
+                            <option value="{{ value }}">{{ name|title }}</option>
+                          {% endfor %}
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="title" class="control-label col-sm-2">Title:</label>
+                    <div class="col-sm-10">
+                      <input type="text" class="form-control col-sm-10" name="title" placeholder="Title (optional)">
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="url" class="control-label col-sm-2">Url:</label>
+                    <div class="col-sm-10">
+                      <input type="text" class="form-control col-sm-10" name="url" placeholder="Url">
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="submit-new-widget">Create</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+    </div>
+
+    <script type="text/javascript">
+        $(function () {
+            var renderFeed = function(node) {
+                var rend = '<div class="container">';
+                _.each(node.items, function(item) {
+                    rend += '<div class="row"><div class="span4"><p>';
+                    var description = '<div class="media">';
+                    if(item.picture) {
+                        rend += '<img style="float:left" width="40" align="left" hspace="2" vspace="2" src="' + item.picture + '"/>';
+                        description += '<img style="float:left" width="100" align="left" hspace="2" vspace="2" src="' + item.picture + '"/>';
+                    }
+                    description += '<p>' + item.description + '</p><p>Published at: ' + item.at + '</p><a href="' + item.link + '" target="_blank">Link</a></div>';
+                    if(item.read) {
+                        rend += '<del>';
+                    }
+                    rend += '<a href="#" title="' + item.title + '" data-toggle="popover">' + item.title + '</a>';
+                    if(item.read) {
+                        rend += '</del></p>';
+                    }
+
+                    rend += '<div class="popover-data-content">' + description + '</div>';
+                    rend += '</div></div>';
+                });
+                rend += '</div>';
+                return rend;
+            };
+
+            var renderWidget = function(node) {
+                let rend = '<div class="panel panel-info grid-stack-item-content"><div class="panel-heading"><h3 class="panel-title">' + node.title + '<button type="button" class="close"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button></h3></div>';
+                rend += '<div class="panel-body">';
+                switch (node.type) {
+                    case 1: rend += renderFeed(node.content);
+                }
+                rend += '</div></div>';
+                return rend;
+            };
+
+            var options = {};
+            $('.grid-stack').gridstack(options);
+
+            new function () {
+                this.gridData = [];
+                this.serializedData = [];
+
+                this.grid = $('.grid-stack').data('gridstack');
+
+                this.renderGrid = function(widgets) {
+                    this.grid.removeAll();
+                    var items = GridStackUI.Utils.sort(widgets);
+                    _.each(items, function (node) {
+                        var content = '<div class="grid-stack-item" id="' + node.id + '"></div>';
+                        this.grid.addWidget($(content), node.x, node.y, node.width, node.height, true, null, null, null, null, node.id);
+                    }.bind(this));
+                };
+
+                this.loadGrid = function () {
+                    $.ajax({
+                        url: "{{ url_for('api_widgets', user_id=user.id) }}",
+                        method: 'GET',
+                        context: this,
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json'
+                    }).done(function(resp) {
+                        this.renderGrid(resp.widgets);
+                        this.gridData = resp.widgets;
+                        $('.a')
+                    }.bind(this));
+                };
+
+                this.refreshGrid = function() {
+                    console.log('refreshing');
+                    for(var i=0;i<this.gridData.length;i++) {
+                        let e = this.gridData[i];
+                        $.ajax({
+                            url: this.gridData[i].url,
+                            method: 'GET',
+                            serverType: 'json'
+                        }).done(function(resp){
+                            console.log(e);
+                            $('[data-toggle="popover"]').each(function () {
+                                if (!$(this).is(e.target) && $(this).has(e.target).length === 0 && $('.popover').has(e.target).length === 0) {
+                                    (($(this).popover('hide').data('bs.popover')||{}).inState||{}).click = false  // fix for BS 3.3.6
+                                }
+
+                            });
+                            $('#' + e.id).html(renderWidget(resp.widget));
+                            popoverOptions = {
+                                content: function() {
+                                    let desc = $(this).parent().siblings('.popover-data-content').html();
+                                    return desc;
+                                },
+                                container: 'body',
+                                placement: 'bottom',
+                                html: true
+                            };
+                            $('[data-toggle="popover"]').on('click',function(e){
+                              e.preventDefault();
+                            }).popover(popoverOptions);
+                        }.bind(e));
+                    }
+                    setTimeout(this.refreshGrid, 60 * 1000);
+                }.bind(this);
+
+                this.saveGrid = function () {
+                    this.serializedData = _.map($('.grid-stack > .grid-stack-item:visible'), function (el) {
+                        el = $(el);
+                        var node = el.data('_gridstack_node');
+                        return {
+                            id: node.id,
+                            x: node.x,
+                            y: node.y,
+                            width: node.width,
+                            height: node.height
+                        };
+                    }, this);
+                    $.ajax({
+                        url: window.location.href + '/grid',
+                        method: 'POST',
+                        data: JSON.stringify(this.serializedData, null, '    ')
+                    });
+                    return false;
+                }.bind(this);
+
+                this.addWidget = function () {
+                    $.ajax({
+                        url: "{{ url_for('api_widgets', user_id=user.id) }}",
+                        method: "CREATE",
+                        dataType: 'json',
+                        context: this,
+                        data: $('#newWidgetForm').serializeArray()
+                    }).done(function(resp) {
+                        console.log(resp);
+                        var node = resp.widget;
+                        $('#newWidget').modal('hide');
+                        this.gridData.push(node);
+                        this.renderGrid(this.gridData);
+                    }.bind(this)).fail(function(xhr, status, error) {
+                        console.log("widget creation failed")
+                    });
+                }.bind(this);
+
+                var body = $('body');
+                body.on('click', function (e) {
+                    $('[data-toggle="popover"]').each(function () {
+                        if (!$(this).is(e.target) && $(this).has(e.target).length === 0 && $('.popover').has(e.target).length === 0) {
+                            (($(this).popover('hide').data('bs.popover')||{}).inState||{}).click = false  // fix for BS 3.3.6
+                        }
+
+                    });
+                });
+
+                body.on('click', '.close', function (e) {
+                    e.preventDefault();
+                    var el = $(this).closest('.grid-stack-item');
+                    $.ajax({
+                        url: "{{ url_for('api_widget', user_id=user.id, widget_id=0)[:-1] }}" + el.data('_gridstack_node').id,
+                        method: 'DELETE'
+                    }).done(function() {
+                        $('.grid-stack').data('gridstack').removeWidget(el);
+                    });
+                });
+
+                $('#submit-new-widget').click(this.addWidget);
+                $('#save-grid').click(this.saveGrid);
+
+                this.loadGrid();
+                setTimeout(this.refreshGrid, 200);
+            };
+        });
+    </script>
+{% endblock %}
