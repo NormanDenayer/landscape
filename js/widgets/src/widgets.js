@@ -26,14 +26,17 @@ class Widget extends Component {
       });
   }
   render() {
-      return (<div className="col-md-10">
-          <Panel collapsible defaultExpanded style={{overflow_y:scroll, overflow:"hidden"}} header="Panel heading">
-              <div className="row"><div className="span4"> <p>item1</p></div></div>
-              <div className="row"><div className="span4"> <p>item1</p></div></div>
-              <div className="row"><div className="span4"> <p>item1</p></div></div>
-              <div className="row"><div className="span4"> <p>item1</p></div></div>
-              <div className="row"><div className="span4"> <p>item1</p></div></div>
-          </Panel></div>)
+      return (<div className="container-fluid" style={{height: "inherit"}}>
+          <Panel header="Panel heading" bsStyle="info">
+              <div className="container-fluid">
+                  <div className="row"><div className="span4"> <p>item1</p></div></div>
+                  <div className="row"><div className="span4"> <p>item2</p></div></div>
+                  <div className="row"><div className="span4"> <p>item3</p></div></div>
+                  <div className="row"><div className="span4"> <p>item4</p></div></div>
+                  <div className="row"><div className="span4"> <p>item5</p></div></div>
+              </div>
+          </Panel>
+      </div>)
   }
 }
 
@@ -42,6 +45,8 @@ class Widgets extends Component {
       super();
       this.state = {widgets: []};
       this.loadGrid = this.loadGrid.bind(this);
+      this.onRemoveItem = this.onRemoveItem.bind(this);
+      this.createElement = this.createElement.bind(this);
   }
   componentDidMount() {
       this.loadGrid()
@@ -60,8 +65,13 @@ class Widgets extends Component {
           this.setState({widgets: fakeConfig.widgets})
       });
   }
+  onRemoveItem(e) {
+      //todo:
+  }
   createElement(e) {
-      return <div key={e.id} data-grid={{x: e.x, y: e.y, w: e.w, h: e.h}} className="container"><Widget data={e} /></div>
+      return <div className="container-fluid" key={e.id} data-grid={{x: e.x, y: e.y, w: e.w, h: e.h}}>
+          <Widget data={e} />
+      </div>
   }
   onAddItem(e) {
       e.preventDefault()
