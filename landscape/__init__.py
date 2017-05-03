@@ -27,13 +27,13 @@ login_manager.login_view = 'login'
 
 # configure logging
 handler = RotatingFileHandler(app.config.get('LOG_PATH', '/var/log/landscape.log'), maxBytes=30 * 1024 * 1024, backupCount=1)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s : %(message)s')
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
 logger = logging.getLogger('werkzeug')
 logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 @app.after_request

@@ -38,7 +38,7 @@ def refresh_feed(widget):
     }
     content = []
     for item in f.entries:
-        logger.info(item)
+        logger.debug(item)
         picture = None
         for link in item.links + item.get('media_content', []):
             if 'image' in link.get('type', ''):
@@ -64,7 +64,7 @@ def refresh_feed(widget):
         widget.title = channel['title']
     widget.content = json.dumps({'channel': channel,'items': content})
     db.session.commit()
-    logger.info('widget %r update with %r', widget, content)
+    logger.debug('widget %r update with %r', widget, content)
 
 
 def refresh_widgets():
@@ -84,5 +84,5 @@ def refresh_widgets():
 def running_jobs():
     sched = BackgroundScheduler()
     sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
-    # sched.start()
+    sched.start()
     logger.info('background jobs started')
