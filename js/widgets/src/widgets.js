@@ -1,6 +1,7 @@
 import "babel-polyfill";
 import React, { Component } from 'react';
-import {Panel, Popover, OverlayTrigger} from 'react-bootstrap';
+import {Panel, Popover, OverlayTrigger, Button, Modal, FormControl, FormGroup,
+    HelpBlock, ControlLabel, Alert} from 'react-bootstrap';
 import './widgets.css';
 import '../node_modules/react-grid-layout/css/styles.css';
 import '../node_modules/react-resizable/css/styles.css';
@@ -19,6 +20,7 @@ class Widget extends Component {
           url: this.props.data.url,
           method: 'get',
           servercontentType: 'json',
+          xhrFields: {withCredentials: true},
           context: this
       }).done(function(resp) {
           console.log(resp);
@@ -30,7 +32,7 @@ class Widget extends Component {
           });
           setTimeout(this._loadContent, 60000);
       }).fail(function() {
-          console.log('fail to fetch: ' + this.props.data.url);
+          console.error('fail to fetch: ' + this.props.data.url);
           setTimeout(this._loadContent, 60000);
       });
   }
@@ -63,14 +65,14 @@ class Widget extends Component {
                           <p>{item.description}</p>
                           <p>Published at: {item.at}</p>
                         </div>);
-
-                      let popover = <Popover title={item.title}>{description}</Popover>;
+                      let title = <a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.i].hide()}>{item.title}</a>;
+                      let popover = <Popover title={title}>{description}</Popover>;
                       return (<div className="row">
                         <div className="span4">
                             <p>
                                 {image}
-                                <OverlayTrigger trigger={['hover', 'focus']} placement="bottom" overlay={popover}>
-                                    <a href={item.link} target="_blank">{item.title}</a>
+                                <OverlayTrigger ref={'overlay-' + item.i} trigger={['click']} placement="bottom" overlay={popover} rootClose>
+                                    <a>{item.title}</a>
                                 </OverlayTrigger>
                             </p>
                         </div>
@@ -82,10 +84,20 @@ class Widget extends Component {
   }
 }
 
+function FieldGroup({ id, label, help, ...props }) {
+  return (
+    <FormGroup controlId={id}>
+      <ControlLabel>{label}</ControlLabel>
+      <FormControl {...props} />
+      {help && <HelpBlock>{help}</HelpBlock>}
+    </FormGroup>
+  );
+}
+
 class Widgets extends Component {
   constructor(props) {
       super(props);
-      this.state = {widgets: [], layout: {}};
+      this.state = {widgets: [], layout: {}, showLogin: false, username: undefined, password: undefined, errorText: undefined};
   }
   componentDidMount() {
       this.loadGrid();
@@ -95,26 +107,38 @@ class Widgets extends Component {
           url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
           method:'GET',
           servercontentType: 'json',
+          xhrFields: {withCredentials: true},
           context: this
-      }).done(function(resp){
-          this.setState({widgets: resp.widgets.map((w) => {w.w = w.width; w.h = w.height; return w;})})
-      }.bind(this)).fail(function(){
-          let fakeConfig = {"widgets":[{"h":3,"id":1,"type":1,"url":"/api/v01/user/1/widget/1","w":5,"x":1,"y":0},{"h":3,"id":2,"type":1,"url":"/api/v01/user/1/widget/2","w":5,"x":0,"y":4},{"h":3,"id":3,"type":1,"url":"/api/v01/user/1/widget/3","w":5,"x":0,"y":8},{"h":3,"id":4,"type":1,"url":"/api/v01/user/1/widget/4","w":5,"x":0,"y":12},{"h":3,"id":5,"type":1,"url":"/api/v01/user/1/widget/5","w":5,"x":0,"y":16},{"h":3,"id":6,"type":1,"url":"/api/v01/user/1/widget/6","w":5,"x":0,"y":20}]};
-          this.setState({widgets: fakeConfig.widgets})
-      }.bind(this));
+      }).done(function(resp, statusText, xhr){
+          if(xhr.status === 200) {
+              this.setState({
+                  widgets: resp.widgets.map((w) => {
+                      w.w = w.width;
+                      w.h = w.height;
+                      return w;
+                  })
+              })
+          }
+      }).fail(function(xhr, exception){
+          if(xhr.status === 401) {
+              this.setState({showLogin: true})
+          }
+          console.error('-> login');
+      });
   };
   onRemoveItem = (el) => {
+      this.setState({widgets: this.state.widgets.filter(w => w.id !== el.id)});
       console.log('removing an item');
   };
   createElement = (e) => {
       let removeStyle = {
           position: 'absolute',
-          right: '2px',
-          top: 0,
+          right: '30px',
+          top: '5px',
           cursor: 'pointer'
       };
       console.log(e);
-      return <div className="container-fluid" key={e.id} data-grid={e}>
+      return <div key={e.id} data-grid={e}>
           <Widget data={e} />
           <span className="remove" style={removeStyle} onClick={this.onRemoveItem.bind(this, e)}>x</span>
       </div>
@@ -133,7 +157,7 @@ class Widgets extends Component {
           contentType: 'application/json',
           data: JSON.stringify({'widgets': this.state.layout}),
           context: this
-      }).done(function(resp){
+      }).done(function(){
           console.log('saving the grid')
       }).fail(function(){
           console.error('oups!!!');
@@ -147,12 +171,45 @@ class Widgets extends Component {
     return (
         <div className="container">
 
-          <ResponsiveReactGridLayout className="layout" cols={12} rowHeight={30} width={1200} onLayoutChange={this.onLayoutChange}>
+          <ResponsiveReactGridLayout className="layout"
+                                     cols={12}
+                                     rowHeight={30}
+                                     width={1200}
+                                     onLayoutChange={this.onLayoutChange}>
               {this.state.widgets.map(this.createElement)}
           </ResponsiveReactGridLayout>
           <hr />
           <button className="btn btn-primary" onClick={this.onAddItem}>Add Item</button>
           <button className="btn btn-primary" onClick={this.onSaveGrid}>Save Grid</button>
+
+          <Modal show={this.state.showLogin}>
+              <Modal.Header><Modal.Title>Login required</Modal.Title></Modal.Header>
+              <Modal.Body>
+                  {this.state.errorText?<Alert bsStyle="danger">
+                      <h3>Oh snap!</h3>
+                      <p>{this.state.errorText}</p>
+                    </Alert>:""}
+                  <FieldGroup id="username" label="Username" type="text" value={this.state.username} onChange={(e) => {this.setState({username: e.target.value})}} placeholder="Username" />
+                  <FieldGroup id="password" label="Password" type="password" value={this.state.password} onChange={(e) => {this.setState({password: e.target.value})}} placeholder="Password" />
+              </Modal.Body>
+              <Modal.Footer>
+                  <Button onClick={() => {
+                      $.ajax({
+                          url: 'http://127.0.0.1:5000/api/v01/login',
+                          method: 'post',
+                          contentType: 'application/json',
+                          context: this,
+                          data: JSON.stringify({username: this.state.username, password: this.state.password})
+                      }).done(function(){
+                          this.setState({username: undefined, password: undefined, showLogin: false, errorText: undefined});
+                          this.loadGrid();
+                      }).fail(function(){
+                          this.setState({errorText: "Invalid credentials..."});
+                      })
+                  }}>Sign in</Button>
+              </Modal.Footer>
+          </Modal>
+
         </div>
     );
   }

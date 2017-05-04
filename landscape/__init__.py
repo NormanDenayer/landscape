@@ -21,9 +21,19 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 # configure flask-login
+
+def unauthorized_handler():
+    from flask import request, abort, redirect
+    from flask_login.utils import login_url
+    if '/api/' in request.url:
+        abort(401)
+    else:
+        return redirect(login_url(login_manager.login_view, request.url))
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.unauthorized_callback = unauthorized_handler
 
 # configure logging
 handler = RotatingFileHandler(app.config.get('LOG_PATH', '/var/log/landscape.log'), maxBytes=30 * 1024 * 1024, backupCount=1)
@@ -38,12 +48,14 @@ logger.setLevel(logging.INFO)
 
 @app.after_request
 def no_cors(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Set-Cookie"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "POST, GET, CREATE, OPTIONS"
     return response
 
 
 import landscape.controller
 import landscape.views
+import landscape.api
 import landscape.tasks
