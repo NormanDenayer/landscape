@@ -32,7 +32,7 @@ def widgets_old(user_id):
     return render_template('widgets_old.html', widget_types=[(t.value, t.name) for t in WidgetType], user=current_user)
 
 
-@app.route('/api/v01/user/<user_id>/widgets', methods=['GET', 'CREATE'], endpoint='api_widgets')
+@app.route('/api/v01/user/<user_id>/widgets', methods=['GET', 'CREATE', 'POST'], endpoint='api_widgets')
 @login_required
 def api_widgets(user_id):
     if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
@@ -46,6 +46,23 @@ def api_widgets(user_id):
             d['url'] = url_for('api_widget', user_id=session['user_id'], widget_id=w.id)
             widgets.append(d)
         return jsonify({'widgets': widgets})
+    # update the widgets (if POST)
+    if request.method == 'POST':
+        db_widgets = Widget.query.filter_by(user_id=session['user_id']).all()
+        db_widgets = {w.id: w for w in db_widgets}
+        for widget in request.json['widgets']:
+            try:
+                db_widget = db_widgets[int(widget['i'])]
+            except (KeyError, ValueError):
+                app.logger.warning('unknown widget (possible threat): %s for %s', widget['i'], session['user_id'])
+                continue
+            db_widget.x = widget['x']
+            db_widget.y = widget['y']
+            db_widget.height = widget['h']
+            db_widget.width = widget['w']
+        db.session.commit()
+        return jsonify({'success': True})
+
     # create a new widget (if CREATE)
     if request.method == 'CREATE':
         coord = Widget.new_coordinates(session['user_id'])

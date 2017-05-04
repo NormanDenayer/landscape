@@ -1,12 +1,12 @@
 import "babel-polyfill";
 import React, { Component } from 'react';
 import {Panel, Popover, OverlayTrigger} from 'react-bootstrap';
-import './App.css';
+import './widgets.css';
 import '../node_modules/react-grid-layout/css/styles.css';
 import '../node_modules/react-resizable/css/styles.css';
 import $ from 'jquery';
-
 import ResponsiveReactGridLayout from 'react-grid-layout';
+
 
 class Widget extends Component {
   constructor(props) {
@@ -85,52 +85,74 @@ class Widget extends Component {
 class Widgets extends Component {
   constructor(props) {
       super(props);
-      this.state = {widgets: []};
-      this.loadGrid = this.loadGrid.bind(this);
-      this.onRemoveItem = this.onRemoveItem.bind(this);
-      this.createElement = this.createElement.bind(this);
+      this.state = {widgets: [], layout: {}};
   }
   componentDidMount() {
       this.loadGrid();
   }
-  loadGrid() {
+  loadGrid = () => {
       $.ajax({
           url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
           method:'GET',
           servercontentType: 'json',
           context: this
       }).done(function(resp){
-          console.log(resp);
           this.setState({widgets: resp.widgets.map((w) => {w.w = w.width; w.h = w.height; return w;})})
       }.bind(this)).fail(function(){
           let fakeConfig = {"widgets":[{"h":3,"id":1,"type":1,"url":"/api/v01/user/1/widget/1","w":5,"x":1,"y":0},{"h":3,"id":2,"type":1,"url":"/api/v01/user/1/widget/2","w":5,"x":0,"y":4},{"h":3,"id":3,"type":1,"url":"/api/v01/user/1/widget/3","w":5,"x":0,"y":8},{"h":3,"id":4,"type":1,"url":"/api/v01/user/1/widget/4","w":5,"x":0,"y":12},{"h":3,"id":5,"type":1,"url":"/api/v01/user/1/widget/5","w":5,"x":0,"y":16},{"h":3,"id":6,"type":1,"url":"/api/v01/user/1/widget/6","w":5,"x":0,"y":20}]};
           this.setState({widgets: fakeConfig.widgets})
       }.bind(this));
-  }
-  onRemoveItem(e) {
-      //todo:
-  }
-  createElement(e) {
+  };
+  onRemoveItem = (el) => {
+      console.log('removing an item');
+  };
+  createElement = (e) => {
+      let removeStyle = {
+          position: 'absolute',
+          right: '2px',
+          top: 0,
+          cursor: 'pointer'
+      };
       console.log(e);
-      return <div className="container-fluid" key={e.id} data-grid={{x: e.x, y: e.y, w: e.w, h: e.h}}>
+      return <div className="container-fluid" key={e.id} data-grid={e}>
           <Widget data={e} />
+          <span className="remove" style={removeStyle} onClick={this.onRemoveItem.bind(this, e)}>x</span>
       </div>
-  }
-  onAddItem(e) {
-      e.preventDefault()
-  }
-  onSaveGrid(e) {
-      e.preventDefault()
-  }
+  };
+  onAddItem = (e) => {
+      e.preventDefault();
+      console.log('adding an item')
+  };
+  onSaveGrid = (e) => {
+      e.preventDefault();
+      $.ajax({
+          url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
+          method:'POST',
+          servercontentType: 'json',
+          dataType: 'json',
+          contentType: 'application/json',
+          data: JSON.stringify({'widgets': this.state.layout}),
+          context: this
+      }).done(function(resp){
+          console.log('saving the grid')
+      }).fail(function(){
+          console.error('oups!!!');
+      });
+  };
+  onLayoutChange = (layout) => {
+      this.setState({layout: layout});
+      console.log(layout);
+  };
   render() {
     return (
         <div className="container">
-          <button className="btn btn-primary" onClick={this.onAddItem}>Add Item</button>
-          <button className="btn btn-primary" onClick={this.onSaveGrid}>Save Grid</button>
 
-          <ResponsiveReactGridLayout className="layout" cols={12} rowHeight={30} width={1200}>
+          <ResponsiveReactGridLayout className="layout" cols={12} rowHeight={30} width={1200} onLayoutChange={this.onLayoutChange}>
               {this.state.widgets.map(this.createElement)}
           </ResponsiveReactGridLayout>
+          <hr />
+          <button className="btn btn-primary" onClick={this.onAddItem}>Add Item</button>
+          <button className="btn btn-primary" onClick={this.onSaveGrid}>Save Grid</button>
         </div>
     );
   }

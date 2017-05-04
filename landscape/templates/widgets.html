@@ -10,37 +10,10 @@
             background-repeat: no-repeat;
             background-size: cover;
         }
-        .panel {
-            height: inherit;
-        }
-        .panel-heading {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: normal;
-        }
-        .panel-body {
-            backface-visibility: hidden;
-            will-change: overflow;
-            white-space: nowrap;
-            overflow: hidden;
-            overflow-y: scroll;
-            text-overflow: ellipsis;
-            line-height: normal;
-            height: calc(100% - 45px);
-            bottom: 0;
-            top: 0;
-
-            font-size: 14px;
-        }
-        .popover-data-content {
-            display: none;
-        }
     </style>
 {% endblock %}
 
 {% block body %}
     <div id="widgets"></div>
     <script type="text/javascript" src="/static/js/widgets.js"></script>
-
 {% endblock %}
