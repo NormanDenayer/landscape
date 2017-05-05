@@ -42,7 +42,7 @@ def refresh_feed(widget):
         logger.debug(item)
         picture = None
         for link in item.links + item.get('media_content', []):
-            if 'image' in link.get('type', ''):
+            if 'image' in link.get('type', 'image'):
                 picture = link.get('href', link.get('url', ''))
                 break
         # else:

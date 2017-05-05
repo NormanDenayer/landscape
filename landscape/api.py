@@ -4,9 +4,16 @@ from flask import request, jsonify, abort, session, url_for
 from flask_login import logout_user, login_user, login_required
 from sqlalchemy.sql import or_
 
+API_VERSION = '01'
+API_PREFIX = '/api/v' + API_VERSION
 
-@app.route('/api/v01/login', methods=['POST'], endpoint='api_login')
+
+@app.route(API_PREFIX + '/login', methods=['POST'], endpoint='api_login')
 def api_login():
+    """
+    Create a new session for users identified with username/password
+    and reply with the appropriate cookie (containing the session id) 
+    """
     username = request.json['username']
     password = request.json['password']
     registered_user = User.query.filter(or_(User.username == username, User.email == username),
@@ -17,34 +24,54 @@ def api_login():
     return jsonify({'success': True})
 
 
-@app.route('/api/v01/logout', methods=['GET'], endpoint='api_logout')
+@app.route(API_PREFIX + '/logout', methods=['GET'], endpoint='api_logout')
 @login_required
 def api_logout():
+    """
+    Logout the current user.
+    """
     logout_user()
     return jsonify({'success': True})
 
 
-@app.route('/api/v01/user/<user_id>/widget/<widget_id>', methods=['GET', 'DELETE'], endpoint='api_widget')
+@app.route(API_PREFIX + '/user/<user_id>/widget/<widget_id>', methods=['GET', 'POST', 'DELETE'], endpoint='api_widget')
 @login_required
 def api_widget(user_id, widget_id):
+    """
+    Handle RUD operation on a widget.
+    (note: for (C)reation see /widgets)
+    GET: return detailed info.
+    POST: update widget details (title, url).
+    DELETE: remove a widget.
+    """
     if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
         return abort(status=403)
-    if request.method == 'GET':
-        widget = Widget.query.filter_by(user_id=user_id, id=widget_id).first()
-        if widget is not None:
-            return jsonify({'widget': widget.to_dict()})
+    widget = Widget.query.filter_by(user_id=user_id, id=widget_id).first()
+    if widget is None:
         return abort(status=404)
 
+    if request.method == 'GET':
+        return jsonify({'widget': widget.to_dict()})
+
+    if request.method == 'POST':  # update an individual widget
+        widget.title = widget.get('title', None) or widget.title
+        widget.url = widget['url']
+
     if request.method == 'DELETE':
-        widget = Widget.query.filter_by(user_id=user_id, id=widget_id).first()
         db.session.delete(widget)
-        db.session.commit()
-        return jsonify({'widget': widget.to_dict(limited=True)})
+    db.session.commit()
+    return jsonify({'widget': widget.to_dict(limited=True)})
 
 
-@app.route('/api/v01/user/<user_id>/widgets', methods=['GET', 'CREATE', 'POST'], endpoint='api_widgets')
+@app.route(API_PREFIX + '/user/<user_id>/widgets', methods=['GET', 'CREATE', 'POST'], endpoint='api_widgets')
 @login_required
 def api_widgets(user_id):
+    """
+    Handle operations on the widgets as collection (aka grid).
+    GET: retrieve the list of widgets + position in the grid).
+    CREATE: add a widget on the grid.
+    POST: update widgets positions.
+    """
     if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
         return abort(status=403)
     # return the widgets configured (if GET)
@@ -76,9 +103,10 @@ def api_widgets(user_id):
     # create a new widget (if CREATE)
     if request.method == 'CREATE':
         coord = Widget.new_coordinates(session['user_id'])
-        if request.form['type'] == str(WidgetType.FEED.value):
-            widget = Widget(type=WidgetType.FEED, user_id=session['user_id'], uri=request.form['url'],
-                            title=request.form['title'], refresh_freq=request.form.get('freq', 60), **coord)
+        new_widget = request.json['widget']
+        if new_widget['type'] == str(WidgetType.FEED.value):
+            widget = Widget(type=WidgetType.FEED, user_id=session['user_id'], uri=new_widget['url'],
+                            title=new_widget['title'], refresh_freq=new_widget.get('freq', 60), **coord)
         else:
             return abort(status=422, description='Invalid type')
 

@@ -1,7 +1,7 @@
 from landscape import app, db
 from landscape.models import User, WidgetType
 
-from flask import request, render_template, redirect, url_for, flash, session, abort, send_from_directory
+from flask import request, render_template, redirect, url_for, flash, send_from_directory
 from flask_login import login_user,login_required, current_user
 from sqlalchemy.sql import or_
 
@@ -20,15 +20,7 @@ def index():
 @app.route('/user/widgets', methods=['GET'])
 @login_required
 def widgets():
-    return render_template('widgets.html', widget_types=[(t.value, t.name) for t in WidgetType], user=current_user)
-
-
-@app.route('/user/<user_id>/widgets', methods=['GET'])
-@login_required
-def widgets_old(user_id):
-    if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
-        return abort(status=403)
-    return render_template('widgets_old.html', widget_types=[(t.value, t.name) for t in WidgetType], user=current_user)
+    return render_template('widgets.html', user=current_user)
 
 
 @app.route('/knock-knock', methods=['GET', 'POST'])

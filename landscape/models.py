@@ -53,11 +53,11 @@ class Widget(db.Model):
             'y': self.y,
             'height': self.height,
             'width': self.width,
+            'uri': self.uri,
+            'title': self.title,
         }
         if not limited:
             entry.update({
-                'uri': self.uri,
-                'title': self.title,
                 'content': json.loads(self.content) if self.content else '',
                 'refresh_freq': self.refresh_freq,
             })
