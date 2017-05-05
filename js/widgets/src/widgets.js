@@ -57,8 +57,8 @@ class Widget extends Component {
                       let image_desc = '';
 
                       if(item.picture) {
-                        image = <img style={{float:"left"}} width="40" align="left" hspace="2" vspace="2" src={item.picture} alt="" />;
-                        image_desc = <img style={{float:"left"}} width="100" align="left" hspace="2" vspace="2" src={item.picture} alt="" />;
+                        image = <img style={{float:"left", marginBottom:"2px"}} width="40" src={item.picture} alt="" />;
+                        image_desc = <img style={{float:"left", marginRight:"2px", marginBottom:"2px"}} width="100" src={item.picture} alt="" />;
                       }
                       let description = (<div className="media">
                           {image_desc}
