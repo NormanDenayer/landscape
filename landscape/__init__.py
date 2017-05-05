@@ -10,6 +10,8 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
+from urllib.parse import urlparse
+from flask import request
 
 from logging.handlers import RotatingFileHandler
 
@@ -48,7 +50,8 @@ logger.setLevel(logging.INFO)
 
 @app.after_request
 def no_cors(response):
-    response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+    origin = '*' if not request.referrer or not app.config.get('DEBUG', False) else '{0.scheme}://{0.netloc}'.format(urlparse(request.referrer))
+    response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Set-Cookie"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "POST, GET, CREATE, OPTIONS"

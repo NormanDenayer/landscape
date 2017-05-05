@@ -156,6 +156,7 @@ class Widgets extends Component {
           dataType: 'json',
           contentType: 'application/json',
           data: JSON.stringify({'widgets': this.state.layout}),
+          xhrFields: {withCredentials: true},
           context: this
       }).done(function(){
           console.log('saving the grid')
