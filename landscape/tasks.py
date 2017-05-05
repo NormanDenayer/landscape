@@ -1,6 +1,7 @@
 import requests
 import json
 import time
+import uuid
 from lxml import html, etree
 from landscape import app, db
 from landscape.models import Widget, WidgetType
@@ -53,6 +54,7 @@ def refresh_feed(widget):
         #                 break
 
         i = {
+            'id': str(uuid.uuid4()),
             'description': limit_html_description(item.description, 100),
             'link': item.link,
             'title': item.title,

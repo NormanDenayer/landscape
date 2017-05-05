@@ -65,13 +65,13 @@ class Widget extends Component {
                           <p>{item.description}</p>
                           <p>Published at: {item.at}</p>
                         </div>);
-                      let title = <a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.i].hide()}>{item.title}</a>;
-                      let popover = <Popover title={title}>{description}</Popover>;
-                      return (<div className="row">
+                      let title = <a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title}</a>;
+                      let popover = <Popover id={'popover-' + item.id} title={title}>{description}</Popover>;
+                      return (<div className="row" key={item.id}>
                         <div className="span4">
                             <p>
                                 {image}
-                                <OverlayTrigger ref={'overlay-' + item.i} trigger={['click']} placement="bottom" overlay={popover} rootClose>
+                                <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
                                     <a>{item.title}</a>
                                 </OverlayTrigger>
                             </p>
