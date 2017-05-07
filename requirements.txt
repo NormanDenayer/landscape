@@ -8,3 +8,4 @@ apscheduler
 requests
 feedparser
 lxml
+python-twitter

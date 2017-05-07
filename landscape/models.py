@@ -10,6 +10,7 @@ class WidgetType(enum.Enum):
     FEED = 1
     LINK = 2
     TODO = 3
+    TWITTER = 4
 
 
 class Widget(db.Model):

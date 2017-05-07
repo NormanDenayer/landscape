@@ -150,6 +150,27 @@ class WidgetModal extends Component {
             widget.url = widget.uri;
             create_flag = false;
         }
+        let fields = undefined;
+        switch(widget.type) {
+            case "4":
+                fields = (<div>
+                        <FieldGroup id="token" label="Token" type="text" value={widget.token}
+                                onChange={this.onToken} placeholder="Token"/>
+                        <hr />
+                        <Button>Get a token</Button>
+                    </div>
+                );
+                break;
+            default:
+                fields = (<div>
+                    <FieldGroup id="title" label="Title (optional)" type="text" value={widget.title}
+                                onChange={this.onTitle} placeholder="Title"/>
+                    <FieldGroup id="url" label="Url" type="text" value={widget.url} onChange={this.onUrl}
+                                placeholder="Url"/>
+                </div>);
+        }
+
+
         return <Modal show={this.props.show}>
               <Modal.Header>
                   <Modal.Title>{create_flag?"New widget":"Edit " + widget.title}</Modal.Title>
@@ -165,10 +186,10 @@ class WidgetModal extends Component {
                           <option value="1">Feed</option>
                           <option value="2">Link</option>
                           <option value="3">Todo</option>
+                          <option value="4">Twitter</option>
                       </FormControl>
                   </FormGroup>
-                  <FieldGroup id="title" label="Title (optional)" type="text" value={widget.title} onChange={this.onTitle} placeholder="Title" />
-                  <FieldGroup id="url" label="Url" type="text" value={widget.url} onChange={this.onUrl} placeholder="Url" />
+                  {fields}
               </Modal.Body>
               <Modal.Footer>
                   <Button bsStyle="primary" onClick={() => {
