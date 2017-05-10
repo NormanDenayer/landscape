@@ -250,8 +250,8 @@ class Widgets extends Component {
                   })
               })
           }
-      }).fail(function(xhr, exception){
-          if(xhr.status === 401) {
+      }).fail((xhr) => {
+          if(xhr.status === 401 || xhr.status === 0) {
               this.setState({showLogin: true})
           }
           console.error('-> login');

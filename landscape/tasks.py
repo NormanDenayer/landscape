@@ -2,6 +2,7 @@ import requests
 import json
 import time
 import hashlib
+from pytz import utc
 from lxml import html, etree
 from landscape import app, db
 from landscape.models import Widget, WidgetType
@@ -94,7 +95,7 @@ def refresh_widgets():
 
 @app.before_first_request
 def running_jobs():
-    sched = BackgroundScheduler()
+    sched = BackgroundScheduler(timezone=utc)
     sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
     sched.start()
     logger.info('background jobs started')

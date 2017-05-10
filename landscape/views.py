@@ -6,7 +6,7 @@ from flask_login import login_user,login_required, current_user
 from sqlalchemy.sql import or_
 
 
-if app.config.get('DEBUG', False) is True:
+if app.config.get('SERVE_STATIC', False) is True:
     @app.route('/static/<path:filename>')
     def static_file(filename):
         return send_from_directory(app.config['STATIC_FOLDER'], filename, as_attachment=True)

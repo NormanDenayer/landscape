@@ -1,5 +1,6 @@
 # Statement for enabling the development environment
 DEBUG = True
+SERVE_STATIC = True
 
 # Define the application directory
 import os
