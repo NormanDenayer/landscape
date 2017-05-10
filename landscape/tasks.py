@@ -65,9 +65,13 @@ def refresh_feed(widget):
             'link': item.link,
             'title': item.title,
             'picture': picture,
-            'at': time.strftime('%D %H:%M', item.published_parsed) if 'published_parsed' in item.keys() else None,
+            'at': time.strftime('%D %H:%M', item.published_parsed) if 'published_parsed' in item.keys() else time.strftime('%D %H:%M', item.updated_parsed) if 'updated_parsed' in item.keys() else None,
+            'read': False,
         }
         content.append(i)
+    if content and content[0]['at'] is not None:
+        content = sorted(content, key=lambda i: i['at'], reverse=True)
+    content = content[:20]
     if not widget.title:
         widget.title = channel['title']
     widget.content = json.dumps({'channel': channel,'items': content})
