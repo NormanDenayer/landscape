@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-import uuid
+import hashlib
 from lxml import html, etree
 from landscape import app, db
 from landscape.models import Widget, WidgetType
@@ -37,8 +37,14 @@ def refresh_feed(widget):
         'description': f.feed.get('description', ''),
         'ttl': f.feed.get('ttl', '60'),
     }
-    content = []
+    if widget.content:
+        content = json.loads(widget.content)['items']
+    else:
+        content = []
+    known = [i['id'] for i in content]
     for item in f.entries:
+        if hashlib.sha1(item.link.encode()).hexdigest() in known:
+            continue
         logger.debug(item)
         picture = None
         for link in item.links + item.get('media_content', []):
@@ -54,7 +60,7 @@ def refresh_feed(widget):
         #                 break
 
         i = {
-            'id': str(uuid.uuid4()),
+            'id': hashlib.sha1(item.link.encode()).hexdigest(),
             'description': limit_html_description(item.description, 100),
             'link': item.link,
             'title': item.title,

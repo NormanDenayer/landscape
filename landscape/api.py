@@ -1,3 +1,5 @@
+import json
+import hashlib
 from landscape import app, db
 from landscape.models import User, Widget, WidgetType
 from flask import request, jsonify, abort, session, url_for
@@ -54,11 +56,32 @@ def api_widget(user_id, widget_id):
         return jsonify({'widget': widget.to_dict()})
 
     if request.method == 'POST':  # update an individual widget
-        widget.title = widget.get('title', None) or widget.title
-        widget.url = widget['url']
+        widget.title = request.json.get('title', None) or widget.title
+        widget.uri = request.json.get('uri', None) or widget.uri
 
     if request.method == 'DELETE':
         db.session.delete(widget)
+    db.session.commit()
+    return jsonify({'widget': widget.to_dict(limited=True)})
+
+
+@app.route(API_PREFIX + '/user/<user_id>/widget/<widget_id>/item/<item_id>', methods=['POST'], endpoint='api_widget_item')
+def api_widget_item(user_id, widget_id, item_id):
+    if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
+        return abort(status=403)
+    widget = Widget.query.filter_by(user_id=user_id, id=widget_id).first()
+    if widget is None:
+        return abort(status=404)
+    content = json.loads(widget.content)
+    for i in content['items']:
+        if i['id'] == item_id:
+            i.update({
+                'read': request.json.get('read', i.get('read', False)),
+            })
+            break
+    else:
+        return abort(status=404)
+    widget.content = json.dumps(content)
     db.session.commit()
     return jsonify({'widget': widget.to_dict(limited=True)})
 

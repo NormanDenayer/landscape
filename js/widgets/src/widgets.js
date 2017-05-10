@@ -78,7 +78,22 @@ class Widget extends Component {
                             <p>
                                 {image}
                                 <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
-                                    <a>{item.title}</a>
+                                    <a onClick={() => {
+                                        $.ajax({
+                                            url: this.props.data.url + '/item/' + item.id,
+                                            method: 'POST',
+                                            contentType: 'application/json',
+                                            servercontentType: 'json',
+                                            xhrFields: {withCredentials: true},
+                                            context: this,
+                                            data: JSON.stringify({read: true})
+                                        }).done(() => {
+                                            let index = this.state.content.items.findIndex(i => i.id === item.id);
+                                            this.setState({content: update(this.state.content, {items: {[index]: {read: {$set: true}}}})});
+                                        })
+                                    }}>{
+                                        (item.read)?<del>{item.title}</del>:item.title
+                                    }</a>
                                 </OverlayTrigger>
                             </p>
                         </div>
@@ -188,13 +203,13 @@ class WidgetModal extends Component {
                           })
                       } else {  // update
                           $.ajax({
-                              url: 'http://127.0.0.1:5000/api/v01/user/1/widget/' + this.state.widget.id,
+                              url: 'http://127.0.0.1:5000/api/v01/user/1/widget/' + widget.id,
                               method: 'POST',
                               contentType: 'application/json',
                               servercontentType: 'json',
                               xhrFields: {withCredentials: true},
                               context: this,
-                              data: JSON.stringify({widget: Object.assign({}, this.props.widget, this.state.diff_widget)})
+                              data: JSON.stringify({widget: widget})
                           }).done(function () {
                               this.onHide(true);
                           }).fail(function (xhr, exception) {
@@ -253,7 +268,7 @@ class Widgets extends Component {
   };
   createElement = (e) => {
       return <div key={e.id} data-grid={e}>
-          <Widget data={e} />
+          <Widget key={e.id} data={e} />
           <span className="remove glyphicon glyphicon-erase" onClick={this.onRemoveItem.bind(this, e)} />
           <span className="update glyphicon glyphicon-pencil" onClick={this.onUpdateItem.bind(this, e)} />
       </div>
