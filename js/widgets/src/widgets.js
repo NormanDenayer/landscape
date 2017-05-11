@@ -7,7 +7,8 @@ import './widgets.css';
 import '../node_modules/react-grid-layout/css/styles.css';
 import '../node_modules/react-resizable/css/styles.css';
 import $ from 'jquery';
-import ResponsiveReactGridLayout from 'react-grid-layout';
+import {Responsive, WidthProvider} from 'react-grid-layout';
+const ResponsiveReactGridLayout = WidthProvider(Responsive);
 
 
 class Widget extends Component {
@@ -74,7 +75,7 @@ class Widget extends Component {
                       let title = <a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title}</a>;
                       let popover = <Popover id={'popover-' + item.id} title={title}>{description}</Popover>;
                       return (<div className="row" key={item.id}>
-                        <div className="span4">
+                        <div className={"span4 " + ((item.read)?"read":"")}>
                             <p>
                                 {image}
                                 <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
@@ -91,9 +92,7 @@ class Widget extends Component {
                                             let index = this.state.content.items.findIndex(i => i.id === item.id);
                                             this.setState({content: update(this.state.content, {items: {[index]: {read: {$set: true}}}})});
                                         })
-                                    }}>{
-                                        <div className={(item.read)?"read":""}>{item.title}</div>
-                                    }</a>
+                                    }}>{item.title}</a>
                                 </OverlayTrigger>
                             </p>
                         </div>
@@ -246,6 +245,7 @@ class Widgets extends Component {
                   widgets: resp.widgets.map((w) => {
                       w.w = w.width;
                       w.h = w.height;
+                      w.i = w.id.toString();
                       return w;
                   })
               })
@@ -267,7 +267,7 @@ class Widgets extends Component {
       })
   };
   createElement = (e) => {
-      return <div key={e.id} data-grid={e}>
+      return <div key={e.id}>
           <Widget key={e.id} data={e} />
           <span className="remove glyphicon glyphicon-erase" onClick={this.onRemoveItem.bind(this, e)} />
           <span className="update glyphicon glyphicon-pencil" onClick={this.onUpdateItem.bind(this, e)} />
@@ -298,14 +298,25 @@ class Widgets extends Component {
       this.setState({layout: layout});
       console.log(layout);
   };
+  mobileLayout = (layout) => {
+      return layout.map((l) => {
+          let new_i = Object.assign({}, l);
+          new_i.x = 0;
+          return new_i;
+      });
+  };
   render() {
+    let layout = this.state.widgets;
+    let mobLayout = this.mobileLayout(layout);
+    console.log(layout);
     return (
         <div className="container">
 
           <ResponsiveReactGridLayout className="layout"
-                                     cols={12}
-                                     rowHeight={30}
-                                     width={1200}
+                                     rowHeight={30} measureBeforeMount={false}
+                                     cols={{lg: 12, md: 10, sm: 6, xs: 4, xxs: 2}}
+                                     breakpoints={{lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0}}
+                                     layouts={{lg: layout, md: layout, sm: mobLayout, xs: mobLayout, xxs: mobLayout}}
                                      onLayoutChange={this.onLayoutChange}>
               {this.state.widgets.map(this.createElement)}
           </ResponsiveReactGridLayout>
