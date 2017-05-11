@@ -36,6 +36,11 @@
     top: 9px;
     cursor: pointer;
 }
+.read {
+    text-decoration: line-through;
+    opacity: 0.65;
+    color: rgb(128, 128, 128);
+}
 a {
     cursor: pointer;
 }

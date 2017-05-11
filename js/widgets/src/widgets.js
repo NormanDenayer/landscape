@@ -92,7 +92,7 @@ class Widget extends Component {
                                             this.setState({content: update(this.state.content, {items: {[index]: {read: {$set: true}}}})});
                                         })
                                     }}>{
-                                        (item.read)?<del>{item.title}</del>:item.title
+                                        <div className={(item.read)?"read":""}>{item.title}</div>
                                     }</a>
                                 </OverlayTrigger>
                             </p>
