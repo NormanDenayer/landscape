@@ -2,8 +2,11 @@ import requests
 import json
 import time
 import hashlib
+import datetime
+import locale
 from pytz import utc
 from lxml import html, etree
+from operator import itemgetter
 from landscape import app, db
 from landscape.models import Widget, WidgetType
 
@@ -30,7 +33,60 @@ def limit_html_description(text, limit):
     return result
 
 
+def refresh_tf1(widget):
+    if widget.content:
+        content = json.loads(widget.content)['items']
+    else:
+        content = []
+    known = [i['id'] for i in content]
+
+    resp = requests.get(widget.uri)
+    parsed = html.fromstring(resp.text)
+    locale.setlocale(locale.LC_ALL, 'fr_FR.UTF-8')
+    sections = parsed.xpath("//section[contains(@class, 'no_bg')]")
+    channel = {
+        'title': parsed.xpath('//title')[0].text,
+        'description': '',
+        'ttl': '60', # todo: should be 1 day
+    }
+    for s in sections:
+        e = s.find_class('text_title')[0]
+        date_title = e.text if e.text is not None else e[0].text
+        published_date = datetime.datetime.strptime(f'{date_title} {datetime.date.today().year}', '%A %d %B %Y')
+        for elt in s.find_class('mosaic_link'):
+            article_link = elt.get('href')
+            title = elt.find_class('text_title')[0].text
+            link = 'https://www.tf1.fr' + article_link
+            if hashlib.sha1(link.encode()).hexdigest() in known:
+                continue
+            logger.debug('adding %s', title)
+            i = {
+                'id': hashlib.sha1(link.encode()).hexdigest(),
+                'description': '',
+                'link': link,
+                'title': title,
+                'picture': None,
+                'at': published_date.strftime('%D %H:%M'),
+                'read': False,
+            }
+            content.append(i)
+
+    if content and content[0]['at'] is not None:
+        content = sorted(content, key=itemgetter('at'), reverse=True)
+    if not widget.title:
+        widget.title = channel['title']
+    widget.content = json.dumps({'channel': channel,'items': content})
+    db.session.commit()
+    logger.debug('widget %r update with %r', widget, content)
+
+
 def refresh_feed(widget):
+    if widget.content:
+        content = json.loads(widget.content)['items']
+    else:
+        content = []
+    known = [i['id'] for i in content]
+
     resp = requests.get(widget.uri)
     f = feedparser.parse(resp.text)
     channel = {
@@ -38,11 +94,6 @@ def refresh_feed(widget):
         'description': f.feed.get('description', ''),
         'ttl': f.feed.get('ttl', '60'),
     }
-    if widget.content:
-        content = json.loads(widget.content)['items']
-    else:
-        content = []
-    known = [i['id'] for i in content]
     for item in f.entries:
         if hashlib.sha1(item.link.encode()).hexdigest() in known:
             continue
@@ -52,13 +103,6 @@ def refresh_feed(widget):
             if 'image' in link.get('type', 'image'):
                 picture = link.get('href', link.get('url', ''))
                 break
-        # else:
-        #     if 'content' in item:
-        #         for c in item.content:
-        #             m = re.search(r'<img.* src="(.+)".+ />', c.value)
-        #             if m is not None:
-        #                 picture = m.groups()[0]
-        #                 break
 
         i = {
             'id': hashlib.sha1(item.link.encode()).hexdigest(),
@@ -71,7 +115,7 @@ def refresh_feed(widget):
         }
         content.append(i)
     if content and content[0]['at'] is not None:
-        content = sorted(content, key=lambda i: i['at'], reverse=True)
+        content = sorted(content, key=itemgetter('at'), reverse=True)
     content = content[:20]
     if not widget.title:
         widget.title = channel['title']
@@ -88,7 +132,10 @@ def refresh_widgets():
             logger.info('refreshing %r', widget)
             if widget.type == WidgetType.FEED:
                 try:
-                    refresh_feed(widget)
+                    if widget.uri.lower().contains('www.tf1.fr'):
+                        refresh_tf1(widget)
+                    else:
+                        refresh_feed(widget)
                 except:
                     logger.exception('impossible to refresh %r', widget)
 
