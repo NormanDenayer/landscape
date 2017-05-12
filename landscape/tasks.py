@@ -132,7 +132,7 @@ def refresh_widgets():
             logger.info('refreshing %r', widget)
             if widget.type == WidgetType.FEED:
                 try:
-                    if widget.uri.lower().contains('www.tf1.fr'):
+                    if 'www.tf1.fr' in widget.uri.lower():
                         refresh_tf1(widget)
                     else:
                         refresh_feed(widget)
