@@ -300,9 +300,9 @@ class Widgets extends Component {
   };
   mobileLayout = (layout) => {
       return layout.map((l) => {
-          let new_i = Object.assign({}, l);
-          new_i.x = 0;
-          return new_i;
+          let i = Object.assign({}, l);
+          i.x = 0;
+          return i;
       });
   };
   render() {
