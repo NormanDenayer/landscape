@@ -3,7 +3,7 @@ import json
 import time
 import hashlib
 import datetime
-import locale
+import re
 from pytz import utc
 from lxml import html, etree
 from operator import itemgetter
@@ -14,6 +14,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import feedparser
 
 logger = app.logger
+TMC_DATE = re.compile(r'(\w+) (\d{1,2}) (\w+) (\d{4})')
+MOIS_2_MONTH = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE']
 
 
 def limit_html_description(text, limit):
@@ -33,6 +35,24 @@ def limit_html_description(text, limit):
     return result
 
 
+def translate_french_date(date, no_except=True):
+    """
+    Because alpine docker container doesn't support well the locales, the date string is translated by code.
+    If the date is invalid, it may return the current date time, if no_except is True.
+    :param date: a date string
+    :return: a datetime
+    """
+    try:
+        _, day, mois, year = TMC_DATE.match(date).groups()
+    except AttributeError:
+        if no_except:
+            return datetime.datetime.now()
+        else:
+            raise
+    else:
+        return datetime.datetime(year=int(year), month=MOIS_2_MONTH.index(mois.upper().replace('É', 'E')) + 1, day=int(day))
+
+
 def refresh_tf1(widget):
     if widget.content:
         content = json.loads(widget.content)['items']
@@ -42,7 +62,6 @@ def refresh_tf1(widget):
 
     resp = requests.get(widget.uri)
     parsed = html.fromstring(resp.text)
-    locale.setlocale(locale.LC_ALL, 'fr_FR.UTF-8')
     sections = parsed.xpath("//section[contains(@class, 'no_bg')]")
     channel = {
         'title': parsed.xpath('//title')[0].text,
@@ -52,7 +71,7 @@ def refresh_tf1(widget):
     for s in sections:
         e = s.find_class('text_title')[0]
         date_title = e.text if e.text is not None else e[0].text
-        published_date = datetime.datetime.strptime(f'{date_title} {datetime.date.today().year}', '%A %d %B %Y')
+        published_date = translate_french_date(f'{date_title} {datetime.date.today().year}')
         for elt in s.find_class('mosaic_link'):
             article_link = elt.get('href')
             title = elt.find_class('text_title')[0].text

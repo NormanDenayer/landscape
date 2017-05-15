@@ -8,7 +8,7 @@ ENV FLASK_APP landscape
 ENV APP_SETTINGS "config_prod"
 ENV PYTHONPATH "/landscape"
 
-RUN set -x && apk add --update python3 py3-lxml && locale-gen fr_FR.UTF-8
+RUN set -x && apk add --update python3 py3-lxml
 
 RUN python3 -m pip install -r requirements.txt
 RUN python3 setup.py install
