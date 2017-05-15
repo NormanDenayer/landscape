@@ -16,6 +16,7 @@ import feedparser
 logger = app.logger
 TMC_DATE = re.compile(r'(\w+) (\d{1,2}) (\w+) (\d{4})')
 MOIS_2_MONTH = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE']
+HASH_URL = lambda url: hashlib.sha1(url).hexdigest()
 
 
 def limit_html_description(text, limit):
@@ -76,11 +77,11 @@ def refresh_tf1(widget):
             article_link = elt.get('href')
             title = elt.find_class('text_title')[0].text
             link = 'https://www.tf1.fr' + article_link
-            if hashlib.sha1(link.encode()).hexdigest() in known:
+            if HASH_URL(link.encode()) in known:
                 continue
             logger.debug('adding %s', title)
             i = {
-                'id': hashlib.sha1(link.encode()).hexdigest(),
+                'id': HASH_URL(link.encode()),
                 'description': '',
                 'link': link,
                 'title': title,
@@ -114,7 +115,7 @@ def refresh_feed(widget):
         'ttl': f.feed.get('ttl', '60'),
     }
     for item in f.entries:
-        if hashlib.sha1(item.link.encode()).hexdigest() in known:
+        if HASH_URL(item.link.encode()) in known:
             continue
         logger.debug(item)
         picture = None
@@ -123,8 +124,9 @@ def refresh_feed(widget):
                 picture = link.get('href', link.get('url', ''))
                 break
 
+        pub_date = item.get('published_parsed', item.get('updated_parsed', None))
         i = {
-            'id': hashlib.sha1(item.link.encode()).hexdigest(),
+            'id': HASH_URL(item.link.encode()),
             'description': limit_html_description(item.description, 100),
             'link': item.link,
             'title': item.title,
