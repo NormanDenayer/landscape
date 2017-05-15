@@ -360,7 +360,7 @@ class Widgets extends Component {
                           context: this,
                           data: JSON.stringify({username: this.state.username, password: this.state.password})
                       }).done(function(resp){
-                          this.setState({username: undefined, password: undefined, showLogin: false, errorText: undefined, user_id: resp.user_d});
+                          this.setState({username: undefined, password: undefined, showLogin: false, errorText: undefined, user_id: resp.user_id});
                           this.loadGrid();
                       }).fail(function(){
                           this.setState({errorText: "Invalid credentials..."});
