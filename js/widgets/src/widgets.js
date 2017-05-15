@@ -188,7 +188,7 @@ class WidgetModal extends Component {
                   <Button bsStyle="primary" onClick={() => {
                       if(create_flag) {  // create
                           $.ajax({
-                              url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
+                              url: 'http://127.0.0.1:5000/api/v01/user/' + this.props.user_id + '/widgets',
                               method: 'CREATE',
                               contentType: 'application/json',
                               servercontentType: 'json',
@@ -202,7 +202,7 @@ class WidgetModal extends Component {
                           })
                       } else {  // update
                           $.ajax({
-                              url: 'http://127.0.0.1:5000/api/v01/user/1/widget/' + widget.id,
+                              url: 'http://127.0.0.1:5000/api/v01/user/' + this.props.user_id + '/widget/' + widget.id,
                               method: 'POST',
                               contentType: 'application/json',
                               servercontentType: 'json',
@@ -227,14 +227,14 @@ class Widgets extends Component {
       super(props);
       this.state = {widgets: [], layout: {}, showAddWidget: false, widget:undefined,
           showLogin: false, username: undefined, password: undefined,
-          errorText: undefined};
+          errorText: undefined, user_id: undefined};
   }
   componentDidMount() {
       this.loadGrid();
   }
   loadGrid = () => {
       $.ajax({
-          url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
+          url: 'http://127.0.0.1:5000/api/v01/user/' + this.state.user_id + '/widgets',
           method:'GET',
           servercontentType: 'json',
           xhrFields: {withCredentials: true},
@@ -280,7 +280,7 @@ class Widgets extends Component {
   onSaveGrid = (e) => {
       e.preventDefault();
       $.ajax({
-          url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
+          url: 'http://127.0.0.1:5000/api/v01/user/' + this.state.user_id + '/widgets',
           method:'POST',
           servercontentType: 'json',
           dataType: 'json',
@@ -353,11 +353,12 @@ class Widgets extends Component {
                           url: 'http://127.0.0.1:5000/api/v01/login',
                           method: 'post',
                           contentType: 'application/json',
+                          servercontentType: 'json',
                           xhrFields: {withCredentials: true},
                           context: this,
                           data: JSON.stringify({username: this.state.username, password: this.state.password})
-                      }).done(function(){
-                          this.setState({username: undefined, password: undefined, showLogin: false, errorText: undefined});
+                      }).done(function(resp){
+                          this.setState({username: undefined, password: undefined, showLogin: false, errorText: undefined, user_id: resp.user_d});
                           this.loadGrid();
                       }).fail(function(){
                           this.setState({errorText: "Invalid credentials..."});
@@ -365,7 +366,7 @@ class Widgets extends Component {
                   }}>Sign in</Button>
               </Modal.Footer>
           </Modal>
-          <WidgetModal show={this.state.showAddWidget} widget={this.state.widget} onHide={(dirty) => {
+          <WidgetModal show={this.state.showAddWidget} widget={this.state.widget} user_id={this.state.user_id} onHide={(dirty) => {
               if(dirty) {
                   this.loadGrid();
               }

@@ -23,7 +23,7 @@ def api_login():
     if registered_user is None:
         abort(status=401)  # 401 Unauthorized
     login_user(registered_user)
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'user_id': registered_user.id})
 
 
 @app.route(API_PREFIX + '/logout', methods=['GET'], endpoint='api_logout')
