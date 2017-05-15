@@ -10,6 +10,8 @@ import $ from 'jquery';
 import {Responsive, WidthProvider} from 'react-grid-layout';
 const ResponsiveReactGridLayout = WidthProvider(Responsive);
 
+const BASE_API_URL = 'http://127.0.0.1:5001/api/v01';
+
 
 class Widget extends Component {
   constructor(props) {
@@ -188,7 +190,7 @@ class WidgetModal extends Component {
                   <Button bsStyle="primary" onClick={() => {
                       if(create_flag) {  // create
                           $.ajax({
-                              url: 'http://127.0.0.1:5000/api/v01/user/' + this.props.user_id + '/widgets',
+                              url: BASE_API_URL + '/user/' + this.props.user_id + '/widgets',
                               method: 'CREATE',
                               contentType: 'application/json',
                               servercontentType: 'json',
@@ -202,7 +204,7 @@ class WidgetModal extends Component {
                           })
                       } else {  // update
                           $.ajax({
-                              url: 'http://127.0.0.1:5000/api/v01/user/' + this.props.user_id + '/widget/' + widget.id,
+                              url: BASE_API_URL + '/user/' + this.props.user_id + '/widget/' + widget.id,
                               method: 'POST',
                               contentType: 'application/json',
                               servercontentType: 'json',
@@ -234,7 +236,7 @@ class Widgets extends Component {
   }
   loadGrid = () => {
       $.ajax({
-          url: 'http://127.0.0.1:5000/api/v01/user/' + this.state.user_id + '/widgets',
+          url: BASE_API_URL + '/user/' + this.state.user_id + '/widgets',
           method:'GET',
           servercontentType: 'json',
           xhrFields: {withCredentials: true},
@@ -251,7 +253,7 @@ class Widgets extends Component {
               })
           }
       }).fail((xhr) => {
-          if(xhr.status === 401 || xhr.status === 0) {
+          if(xhr.status === 401 || xhr.status === 0 || xhr.status === 403) {
               this.setState({showLogin: true})
           }
           console.error('-> login');
@@ -280,7 +282,7 @@ class Widgets extends Component {
   onSaveGrid = (e) => {
       e.preventDefault();
       $.ajax({
-          url: 'http://127.0.0.1:5000/api/v01/user/' + this.state.user_id + '/widgets',
+          url: BASE_API_URL + '/user/' + this.state.user_id + '/widgets',
           method:'POST',
           servercontentType: 'json',
           dataType: 'json',
@@ -326,7 +328,7 @@ class Widgets extends Component {
             <Button bsStyle="primary" onClick={this.onSaveGrid}>Save Grid</Button>
             <Button bsStyle="primary" onClick={() => {
                 $.ajax({
-                    url: 'http://127.0.0.1:5000/api/v01/logout',
+                    url: BASE_API_URL + '/logout',
                     method: 'get',
                     contentType: 'application/json',
                     xhrFields: {withCredentials: true},
@@ -350,7 +352,7 @@ class Widgets extends Component {
               <Modal.Footer>
                   <Button bsStyle="primary" onClick={() => {
                       $.ajax({
-                          url: 'http://127.0.0.1:5000/api/v01/login',
+                          url: BASE_API_URL + '/login',
                           method: 'post',
                           contentType: 'application/json',
                           servercontentType: 'json',
