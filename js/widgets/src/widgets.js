@@ -10,7 +10,7 @@ import $ from 'jquery';
 import {Responsive, WidthProvider} from 'react-grid-layout';
 const ResponsiveReactGridLayout = WidthProvider(Responsive);
 
-const BASE_API_URL = 'http://127.0.0.1:5001/api/v01';
+const BASE_API_URL = 'http://127.0.0.1:5000/api/v01';
 
 
 class Widget extends Component {
@@ -64,6 +64,7 @@ class Widget extends Component {
                   {this.state.content.items.map((item) => {
                       let image = '';
                       let image_desc = '';
+                      let pub_time = new Date(item.at);
 
                       if(item.picture) {
                         image = <img style={{float:"left", marginBottom:"2px"}} width="40" src={item.picture} alt="" />;
@@ -72,7 +73,7 @@ class Widget extends Component {
                       let description = (<div className="media">
                           {image_desc}
                           <p>{item.description}</p>
-                          <p>Published at: {item.at}</p>
+                          <p>Published at: {pub_time.toString()}</p>
                         </div>);
                       let title = <a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title}</a>;
                       let popover = <Popover id={'popover-' + item.id} title={title}>{description}</Popover>;

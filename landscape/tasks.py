@@ -4,7 +4,7 @@ import time
 import hashlib
 import datetime
 import re
-from pytz import utc
+from pytz import utc, timezone
 from lxml import html, etree
 from operator import itemgetter
 from landscape import app, db
@@ -86,7 +86,7 @@ def refresh_tf1(widget):
                 'link': link,
                 'title': title,
                 'picture': None,
-                'at': published_date.strftime('%D %H:%M'),
+                'at': published_date.replace(tzinfo=timezone('Europe/Brussels')).isoformat(),
                 'read': False,
             }
             content.append(i)
@@ -132,7 +132,7 @@ def refresh_feed(widget):
             'link': item.link,
             'title': item.title,
             'picture': picture,
-            'at': time.strftime('%D %H:%M', item.published_parsed) if 'published_parsed' in item.keys() else time.strftime('%D %H:%M', item.updated_parsed) if 'updated_parsed' in item.keys() else None,
+            'at': pub_date and datetime.datetime.fromtimestamp(time.mktime(pub_date)).replace(tzinfo=timezone('Europe/Brussels')).isoformat(),
             'read': False,
         }
         content.append(i)
