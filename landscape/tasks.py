@@ -107,7 +107,8 @@ def refresh_feed(widget):
         content = []
     known = [i['id'] for i in content]
 
-    resp = requests.get(widget.uri)
+    # Need to change the user-agent because theverge.com reject specifically the default agent "python-requests".
+    resp = requests.get(widget.uri, headers={'User-Agent': 'landscape/0.0.1'})
     f = feedparser.parse(resp.text)
     channel = {
         'title': f.feed.title,
