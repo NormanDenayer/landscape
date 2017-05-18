@@ -1,5 +1,4 @@
 import json
-import hashlib
 from landscape import app, db
 from landscape.models import User, Widget, WidgetType
 from flask import request, jsonify, abort, session, url_for

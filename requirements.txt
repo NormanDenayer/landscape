@@ -6,4 +6,4 @@ flask-migrate
 apscheduler
 feedparser
 lxml
-aiohttp
+-e git+https://github.com/NormanDenayer/aiohttp.git@master
