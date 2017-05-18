@@ -1,17 +1,26 @@
-import requests
 import json
 import time
 import hashlib
 import datetime
 import re
+import asyncio
+import aiohttp
 from pytz import utc, timezone
 from lxml import html, etree
 from operator import itemgetter
 from landscape import app, db
 from landscape.models import Widget, WidgetType
 
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import feedparser
+
+import logging
+
+l = logging.getLogger('aiohttp')
+l.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+l.addHandler(handler)
 
 logger = app.logger
 TMC_DATE = re.compile(r'(\w+) (\d{1,2}) (\w+) (\d{4})')
@@ -54,16 +63,17 @@ def translate_french_date(date, no_except=True):
         return datetime.datetime(year=int(year), month=MOIS_2_MONTH.index(mois.upper().replace('É', 'E')) + 1, day=int(day))
 
 
-def refresh_tf1(widget):
+async def refresh_tf1(widget):
     if widget.content:
         content = json.loads(widget.content)['items']
     else:
         content = []
     known = [i['id'] for i in content]
 
-    resp = requests.get(widget.uri)
-    parsed = html.fromstring(resp.text)
-    sections = parsed.xpath("//section[contains(@class, 'no_bg')]")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(widget.uri) as resp:
+            parsed = html.fromstring(await resp.read(errors='ignore'))
+            sections = parsed.xpath("//section[contains(@class, 'no_bg')]")
     channel = {
         'title': parsed.xpath('//title')[0].text,
         'description': '',
@@ -100,7 +110,7 @@ def refresh_tf1(widget):
     logger.debug('widget %r update with %r', widget, content)
 
 
-def refresh_feed(widget):
+async def refresh_feed(widget):
     if widget.content:
         content = json.loads(widget.content)['items']
     else:
@@ -108,8 +118,14 @@ def refresh_feed(widget):
     known = [i['id'] for i in content]
 
     # Need to change the user-agent because theverge.com reject specifically the default agent "python-requests".
-    resp = requests.get(widget.uri, headers={'User-Agent': 'landscape/0.0.1'})
-    f = feedparser.parse(resp.text)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(widget.uri, headers={'User-Agent': 'landscape/0.0.1'}) as resp:
+            answer = await resp.text(errors='ignore')
+            f = feedparser.parse(answer)
+            try:
+                f.feed.title
+            except AttributeError:
+                return
     channel = {
         'title': f.feed.title,
         'description': f.feed.get('description', ''),
@@ -146,8 +162,9 @@ def refresh_feed(widget):
     logger.debug('widget %r update with %r', widget, content)
 
 
-def refresh_widgets():
+async def refresh_widgets():
     logger.info('refreshing feeds')
+    futures = []
     with app.app_context():
         widgets = Widget.query.all()
         for widget in widgets:
@@ -155,16 +172,26 @@ def refresh_widgets():
             if widget.type == WidgetType.FEED:
                 try:
                     if 'www.tf1.fr' in widget.uri.lower():
-                        refresh_tf1(widget)
+                        fut = refresh_tf1(widget)
                     else:
-                        refresh_feed(widget)
+                        fut = refresh_feed(widget)
                 except:
                     logger.exception('impossible to refresh %r', widget)
+                else:
+                    futures.append(fut)
+        await asyncio.gather(*futures)
 
 
 @app.before_first_request
 def running_jobs():
-    sched = BackgroundScheduler(timezone=utc)
+    sched = AsyncIOScheduler(timezone=utc)
     sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
     sched.start()
     logger.info('background jobs started')
+
+    import threading
+    #  Execution will block here until Ctrl+C (Ctrl+Break on Windows) is pressed.
+    try:
+        threading.Thread(target=asyncio.get_event_loop().run_forever).start()
+    except (KeyboardInterrupt, SystemExit):
+        pass
