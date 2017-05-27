@@ -4,7 +4,7 @@ from setuptools import setup
 import landscape
 
 with open('requirements.txt', 'r') as reqs:
-    requirements = reqs.read().split('\n')
+    requirements = [r for r in reqs.read().split('\n') if '://' not in r]
 
 setup(name='landscape',
       author='Norman Denayer',
@@ -22,7 +22,7 @@ setup(name='landscape',
           'console_scripts': [
           ],
       },
-      install_requires = requirements,
+      #install_requires = requirements,
       classifiers=[
           'Development Status :: 5 - Production/Stable',
           'Intended Audience :: Developers',

@@ -63,6 +63,7 @@ def translate_french_date(date, no_except=True):
         return datetime.datetime(year=int(year), month=MOIS_2_MONTH.index(mois.upper().replace('É', 'E')) + 1, day=int(day))
 
 
+# todo: generalize the code to merge with refresh_feed()
 async def refresh_tf1(widget):
     if widget.content:
         content = json.loads(widget.content)['items']
@@ -72,7 +73,7 @@ async def refresh_tf1(widget):
 
     async with aiohttp.ClientSession() as session:
         async with session.get(widget.uri) as resp:
-            parsed = html.fromstring(await resp.read(errors='ignore'))
+            parsed = html.fromstring(await resp.text(errors='ignore'))
             sections = parsed.xpath("//section[contains(@class, 'no_bg')]")
     channel = {
         'title': parsed.xpath('//title')[0].text,
