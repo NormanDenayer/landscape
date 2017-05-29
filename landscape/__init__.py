@@ -44,7 +44,8 @@ def no_cors(response):
     Deactivate CORS.
     Accept all hosts in DEBUG mode. Accept all hosts without credentials otherwise.
     """
-    origin = '*' if not request.referrer or not app.config.get('DEBUG', False) else '{0.scheme}://{0.netloc}'.format(urlparse(request.referrer))
+    refer = urlparse(request.referrer)
+    origin = '*' if not request.referrer or not app.config.get('DEBUG', False) else f'{refer.scheme}://{refer.netloc}'
     response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Set-Cookie"
     response.headers["Access-Control-Allow-Credentials"] = "true"
