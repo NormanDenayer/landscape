@@ -24,7 +24,25 @@ HASH_URL = lambda url: hashlib.sha1(url).hexdigest()
 class ParsingError(Exception): pass
 
 
+class Namespace:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+    def get(self, key, *args):
+        try:
+            return getattr(self, key)
+        except AttributeError as e:
+            if len(args) != 0:
+                return args[0]
+            raise KeyError(e)
+
+
 def limit_html_description(text, limit):
+    """
+    Truncate "wisely" the text got in params.
+    It truncates after the last word making the text longer than the limit.
+    (and append '...')
+    """
     try:
         node = html.fromstring(text)
     except etree.ParseError:
@@ -57,19 +75,6 @@ def translate_french_date(date, no_except=True):
             raise
     else:
         return datetime.datetime(year=int(year), month=MOIS_2_MONTH.index(mois.upper().replace('É', 'E')) + 1, day=int(day))
-
-
-class Namespace:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-    def get(self, key, *args):
-        try:
-            return getattr(self, key)
-        except AttributeError as e:
-            if len(args) != 0:
-                return args[0]
-            raise KeyError(e)
 
 
 def general_feed_parser(text):
@@ -167,18 +172,16 @@ async def refresh_widgets():
         for widget in widgets:
             logger.info('refreshing %r', widget)
             if widget.type == WidgetType.FEED:
-                try:
-                    if 'www.tf1.fr' in widget.uri.lower():
-                        fut = refresh_feed(widget, parser=tf1_feed_parser)
-                    else:
-                        fut = refresh_feed(widget, parser=general_feed_parser)
-                except:
-                    logger.exception('impossible to refresh %r', widget)
+                if 'www.tf1.fr' in widget.uri.lower():
+                    parser = tf1_feed_parser
                 else:
-                    futures.append(fut)
+                    parser = general_feed_parser
+                fut = refresh_feed(widget, parser=parser)
+                futures.append(fut)
         await asyncio.gather(*futures)
 
 
+@app.before_first_request
 def running_jobs():
     sched = AsyncIOScheduler(timezone=utc)
     sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
@@ -191,6 +194,3 @@ def running_jobs():
         threading.Thread(target=asyncio.get_event_loop().run_forever).start()
     except (KeyboardInterrupt, SystemExit):
         pass
-
-
-running_jobs()
