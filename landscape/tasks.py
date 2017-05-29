@@ -14,18 +14,14 @@ from landscape.models import Widget, WidgetType
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import feedparser
 
-import logging
-
-l = logging.getLogger('aiohttp')
-l.setLevel(logging.DEBUG)
-handler = logging.StreamHandler()
-handler.setLevel(logging.DEBUG)
-l.addHandler(handler)
 
 logger = app.logger
 TMC_DATE = re.compile(r'(\w+) (\d{1,2}) (\w+) (\d{4})')
 MOIS_2_MONTH = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE']
 HASH_URL = lambda url: hashlib.sha1(url).hexdigest()
+
+
+class ParsingError(Exception): pass
 
 
 def limit_html_description(text, limit):
@@ -63,76 +59,76 @@ def translate_french_date(date, no_except=True):
         return datetime.datetime(year=int(year), month=MOIS_2_MONTH.index(mois.upper().replace('É', 'E')) + 1, day=int(day))
 
 
-# todo: generalize the code to merge with refresh_feed()
-async def refresh_tf1(widget):
-    if widget.content:
-        content = json.loads(widget.content)['items']
-    else:
-        content = []
-    known = [i['id'] for i in content]
+class Namespace:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(widget.uri) as resp:
-            parsed = html.fromstring(await resp.text(errors='ignore'))
-            sections = parsed.xpath("//section[contains(@class, 'no_bg')]")
-    channel = {
-        'title': parsed.xpath('//title')[0].text,
-        'description': '',
-        'ttl': '60', # todo: should be 1 day
-    }
+    def get(self, key, *args):
+        try:
+            return getattr(self, key)
+        except AttributeError as e:
+            if len(args) != 0:
+                return args[0]
+            raise KeyError(e)
+
+
+def general_feed_parser(text):
+    f = feedparser.parse(text)
+    try:
+        f.feed.title
+    except AttributeError:
+        raise ParsingError('invalid title')
+    except Exception as e:
+        raise ParsingError(e)
+    else:
+        return f
+
+
+def tf1_feed_parser(text):
+    parsed = html.fromstring(text)
+    sections = parsed.xpath("//section[contains(@class, 'no_bg')]")
+
+    result = Namespace(entries=[])
+    result.feed = Namespace(title=parsed.xpath('//title')[0].text, description='', ttl='60')
+
     for s in sections:
         e = s.find_class('text_title')[0]
         date_title = e.text if e.text is not None else e[0].text
         published_date = translate_french_date(f'{date_title} {datetime.date.today().year}')
         for elt in s.find_class('mosaic_link'):
             article_link = elt.get('href')
-            title = elt.find_class('text_title')[0].text
-            link = 'https://www.tf1.fr' + article_link
-            if HASH_URL(link.encode()) in known:
-                continue
-            logger.debug('adding %s', title)
-            i = {
-                'id': HASH_URL(link.encode()),
-                'description': '',
-                'link': link,
-                'title': title,
-                'picture': None,
-                'at': published_date.replace(tzinfo=timezone('Europe/Brussels')).isoformat(),
-                'read': False,
-            }
-            content.append(i)
-
-    if content and content[0]['at'] is not None:
-        content = sorted(content, key=itemgetter('at'), reverse=True)
-    if not widget.title:
-        widget.title = channel['title']
-    widget.content = json.dumps({'channel': channel,'items': content})
-    db.session.commit()
-    logger.debug('widget %r update with %r', widget, content)
+            result.entries.append(Namespace(
+                link='https://www.tf1.fr' + article_link,
+                links=[],
+                published_parsed=published_date.timetuple(),
+                description='',
+                title=elt.find_class('text_title')[0].text,
+            ))
+    return result
 
 
-async def refresh_feed(widget):
-    if widget.content:
-        content = json.loads(widget.content)['items']
-    else:
-        content = []
+async def refresh_feed(widget, *, parser):
+    content = json.loads(widget.content)['items'] if widget.content else []
     known = [i['id'] for i in content]
 
     # Need to change the user-agent because theverge.com reject specifically the default agent "python-requests".
     async with aiohttp.ClientSession() as session:
-        async with session.get(widget.uri, headers={'User-Agent': 'landscape/0.0.1'}) as resp:
-            answer = await resp.text(errors='ignore')
-            f = feedparser.parse(answer)
-            try:
-                f.feed.title
-            except AttributeError:
-                return
+        try:
+            async with session.get(widget.uri, headers={'User-Agent': 'landscape/0.0.1'}) as resp:
+                answer = await resp.text(errors='ignore')
+                try:
+                    parsed_answer = parser(answer)
+                except ParsingError:
+                    return
+        except aiohttp.client_exceptions.ServerDisconnectedError as e:
+            logger.exception(f'it seems the server disconnected unexpectedly: {widget.uri} - {e}')
+            return
     channel = {
-        'title': f.feed.title,
-        'description': f.feed.get('description', ''),
-        'ttl': f.feed.get('ttl', '60'),
+        'title': parsed_answer.feed.title,
+        'description': parsed_answer.feed.get('description', ''),
+        'ttl': parsed_answer.feed.get('ttl', '60'),
     }
-    for item in f.entries:
+    for item in parsed_answer.entries:
         if HASH_URL(item.link.encode()) in known:
             continue
         logger.debug(item)
@@ -173,9 +169,9 @@ async def refresh_widgets():
             if widget.type == WidgetType.FEED:
                 try:
                     if 'www.tf1.fr' in widget.uri.lower():
-                        fut = refresh_tf1(widget)
+                        fut = refresh_feed(widget, parser=tf1_feed_parser)
                     else:
-                        fut = refresh_feed(widget)
+                        fut = refresh_feed(widget, parser=general_feed_parser)
                 except:
                     logger.exception('impossible to refresh %r', widget)
                 else:
@@ -183,7 +179,6 @@ async def refresh_widgets():
         await asyncio.gather(*futures)
 
 
-@app.before_first_request
 def running_jobs():
     sched = AsyncIOScheduler(timezone=utc)
     sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
@@ -196,3 +191,6 @@ def running_jobs():
         threading.Thread(target=asyncio.get_event_loop().run_forever).start()
     except (KeyboardInterrupt, SystemExit):
         pass
+
+
+running_jobs()
