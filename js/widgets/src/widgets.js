@@ -7,7 +7,10 @@ import './widgets.css';
 import '../node_modules/react-grid-layout/css/styles.css';
 import '../node_modules/react-resizable/css/styles.css';
 import $ from 'jquery';
-import ResponsiveReactGridLayout from 'react-grid-layout';
+import {Responsive, WidthProvider} from 'react-grid-layout';
+const ResponsiveReactGridLayout = WidthProvider(Responsive);
+
+const BASE_API_URL = '/api/v01';
 
 
 class Widget extends Component {
@@ -61,6 +64,7 @@ class Widget extends Component {
                   {this.state.content.items.map((item) => {
                       let image = '';
                       let image_desc = '';
+                      let pub_time = new Date(item.at);
 
                       if(item.picture) {
                         image = <img style={{float:"left", marginBottom:"2px"}} width="40" src={item.picture} alt="" />;
@@ -69,16 +73,29 @@ class Widget extends Component {
                       let description = (<div className="media">
                           {image_desc}
                           <p>{item.description}</p>
-                          <p>Published at: {item.at}</p>
+                          <p>Published at: {pub_time.toString()}</p>
                         </div>);
                       let title = <a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title}</a>;
                       let popover = <Popover id={'popover-' + item.id} title={title}>{description}</Popover>;
                       return (<div className="row" key={item.id}>
-                        <div className="span4">
+                        <div className={"span4 " + ((item.read)?"read":"")}>
                             <p>
                                 {image}
                                 <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
-                                    <a>{item.title}</a>
+                                    <a onClick={() => {
+                                        $.ajax({
+                                            url: this.props.data.url + '/item/' + item.id,
+                                            method: 'POST',
+                                            contentType: 'application/json',
+                                            servercontentType: 'json',
+                                            xhrFields: {withCredentials: true},
+                                            context: this,
+                                            data: JSON.stringify({read: true})
+                                        }).done(() => {
+                                            let index = this.state.content.items.findIndex(i => i.id === item.id);
+                                            this.setState({content: update(this.state.content, {items: {[index]: {read: {$set: true}}}})});
+                                        })
+                                    }}>{item.title}</a>
                                 </OverlayTrigger>
                             </p>
                         </div>
@@ -195,7 +212,7 @@ class WidgetModal extends Component {
                   <Button bsStyle="primary" onClick={() => {
                       if(create_flag) {  // create
                           $.ajax({
-                              url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
+                              url: BASE_API_URL + '/user/' + this.props.user_id + '/widgets',
                               method: 'CREATE',
                               contentType: 'application/json',
                               servercontentType: 'json',
@@ -209,13 +226,13 @@ class WidgetModal extends Component {
                           })
                       } else {  // update
                           $.ajax({
-                              url: 'http://127.0.0.1:5000/api/v01/user/1/widget/' + this.state.widget.id,
+                              url: BASE_API_URL + '/user/' + this.props.user_id + '/widget/' + widget.id,
                               method: 'POST',
                               contentType: 'application/json',
                               servercontentType: 'json',
                               xhrFields: {withCredentials: true},
                               context: this,
-                              data: JSON.stringify({widget: Object.assign({}, this.props.widget, this.state.diff_widget)})
+                              data: JSON.stringify({widget: widget})
                           }).done(function () {
                               this.onHide(true);
                           }).fail(function (xhr, exception) {
@@ -234,14 +251,14 @@ class Widgets extends Component {
       super(props);
       this.state = {widgets: [], layout: {}, showAddWidget: false, widget:undefined,
           showLogin: false, username: undefined, password: undefined,
-          errorText: undefined};
+          errorText: undefined, user_id: undefined};
   }
   componentDidMount() {
       this.loadGrid();
   }
   loadGrid = () => {
       $.ajax({
-          url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
+          url: BASE_API_URL + '/user/' + this.state.user_id + '/widgets',
           method:'GET',
           servercontentType: 'json',
           xhrFields: {withCredentials: true},
@@ -252,12 +269,13 @@ class Widgets extends Component {
                   widgets: resp.widgets.map((w) => {
                       w.w = w.width;
                       w.h = w.height;
+                      w.i = w.id.toString();
                       return w;
                   })
               })
           }
-      }).fail(function(xhr, exception){
-          if(xhr.status === 401) {
+      }).fail((xhr) => {
+          if(xhr.status === 401 || xhr.status === 0 || xhr.status === 403) {
               this.setState({showLogin: true})
           }
           console.error('-> login');
@@ -273,8 +291,8 @@ class Widgets extends Component {
       })
   };
   createElement = (e) => {
-      return <div key={e.id} data-grid={e}>
-          <Widget data={e} />
+      return <div key={e.id}>
+          <Widget key={e.id} data={e} />
           <span className="remove glyphicon glyphicon-erase" onClick={this.onRemoveItem.bind(this, e)} />
           <span className="update glyphicon glyphicon-pencil" onClick={this.onUpdateItem.bind(this, e)} />
       </div>
@@ -286,7 +304,7 @@ class Widgets extends Component {
   onSaveGrid = (e) => {
       e.preventDefault();
       $.ajax({
-          url: 'http://127.0.0.1:5000/api/v01/user/1/widgets',
+          url: BASE_API_URL + '/user/' + this.state.user_id + '/widgets',
           method:'POST',
           servercontentType: 'json',
           dataType: 'json',
@@ -304,14 +322,25 @@ class Widgets extends Component {
       this.setState({layout: layout});
       console.log(layout);
   };
+  mobileLayout = (layout) => {
+      return layout.map((l) => {
+          let i = Object.assign({}, l);
+          i.x = 0;
+          return i;
+      });
+  };
   render() {
+    let layout = this.state.widgets;
+    let mobLayout = this.mobileLayout(layout);
+    console.log(layout);
     return (
         <div className="container">
 
           <ResponsiveReactGridLayout className="layout"
-                                     cols={12}
-                                     rowHeight={30}
-                                     width={1200}
+                                     rowHeight={30} measureBeforeMount={false}
+                                     cols={{lg: 12, md: 10, sm: 6, xs: 4, xxs: 2}}
+                                     breakpoints={{lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0}}
+                                     layouts={{lg: layout, md: layout, sm: mobLayout, xs: mobLayout, xxs: mobLayout}}
                                      onLayoutChange={this.onLayoutChange}>
               {this.state.widgets.map(this.createElement)}
           </ResponsiveReactGridLayout>
@@ -321,7 +350,7 @@ class Widgets extends Component {
             <Button bsStyle="primary" onClick={this.onSaveGrid}>Save Grid</Button>
             <Button bsStyle="primary" onClick={() => {
                 $.ajax({
-                    url: 'http://127.0.0.1:5000/api/v01/logout',
+                    url: BASE_API_URL + '/logout',
                     method: 'get',
                     contentType: 'application/json',
                     xhrFields: {withCredentials: true},
@@ -345,14 +374,15 @@ class Widgets extends Component {
               <Modal.Footer>
                   <Button bsStyle="primary" onClick={() => {
                       $.ajax({
-                          url: 'http://127.0.0.1:5000/api/v01/login',
+                          url: BASE_API_URL + '/login',
                           method: 'post',
                           contentType: 'application/json',
+                          servercontentType: 'json',
                           xhrFields: {withCredentials: true},
                           context: this,
                           data: JSON.stringify({username: this.state.username, password: this.state.password})
-                      }).done(function(){
-                          this.setState({username: undefined, password: undefined, showLogin: false, errorText: undefined});
+                      }).done(function(resp){
+                          this.setState({username: undefined, password: undefined, showLogin: false, errorText: undefined, user_id: resp.user_id});
                           this.loadGrid();
                       }).fail(function(){
                           this.setState({errorText: "Invalid credentials..."});
@@ -360,7 +390,7 @@ class Widgets extends Component {
                   }}>Sign in</Button>
               </Modal.Footer>
           </Modal>
-          <WidgetModal show={this.state.showAddWidget} widget={this.state.widget} onHide={(dirty) => {
+          <WidgetModal show={this.state.showAddWidget} widget={this.state.widget} user_id={this.state.user_id} onHide={(dirty) => {
               if(dirty) {
                   this.loadGrid();
               }

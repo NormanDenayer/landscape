@@ -1,11 +1,9 @@
-setuptools
 flask
 flask-sqlalchemy
 flask-login
-flask-migrate
-psycopg2
 apscheduler
-requests
 feedparser
 lxml
+cython
+git+https://github.com/NormanDenayer/aiohttp.git@master#egg=aiohttp
 python-twitter

@@ -1,14 +1,22 @@
-FROM python:3-alpine
+FROM alpine:edge
 MAINTAINER Norman Denayer<denayer.norman@gmail.com>
 
 ADD . /landscape
 WORKDIR /landscape
 
-RUN set -x && apk add --update postgresql-dev gcc python3-dev musl-dev
-
-RUN pip install -r requirements.txt
-RUN APP_SETTINGS="config_dev" python setup.py install
-
 ENV FLASK_APP landscape
+ENV APP_SETTINGS "config_prod"
+ENV PYTHONPATH "/landscape"
+
+RUN set -x && apk add --update python3 py3-lxml git python3-dev musl-dev gcc ca-certificates
+
+RUN python3 -m pip install -r requirements.txt
+RUN python3 setup.py install
+
+RUN mkdir /data && touch /data/app.db
+RUN apk del git python3-dev musl-dev gcc
+
 CMD ["flask", "run", "-h", "0.0.0.0", "-p", "5000"]
 EXPOSE 5000
+VOLUME /data
+
