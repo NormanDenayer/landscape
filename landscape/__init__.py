@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 from flask import Flask, request, abort, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_url
-from flask_migrate import Migrate
 
 
 app = Flask(__name__, '/static/')
@@ -19,7 +18,6 @@ app.config.from_object(os.environ['APP_SETTINGS'])
 
 # configure the database
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)
 
 # configure flask-login
 login_manager = LoginManager()

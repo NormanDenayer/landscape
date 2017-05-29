@@ -1,8 +1,6 @@
-setuptools
 flask
 flask-sqlalchemy
 flask-login
-flask-migrate
 apscheduler
 feedparser
 lxml
