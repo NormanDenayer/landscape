@@ -48,7 +48,7 @@ def no_cors(response):
     response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Set-Cookie"
     response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "POST, GET, CREATE, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "POST, GET, PUT, OPTIONS, DELETE, CREATE"
     return response
 
 
