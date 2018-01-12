@@ -5,4 +5,4 @@ apscheduler
 feedparser
 lxml
 cython
-git+https://github.com/NormanDenayer/aiohttp.git@master#egg=aiohttp
+aiohttp
