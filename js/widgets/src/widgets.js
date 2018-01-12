@@ -444,7 +444,7 @@ class Widgets extends Component {
                           method: 'post',
                           contentType: 'application/json',
                           servercontentType: 'json',
-                          xhrFields: {withCredentials: true},
+                          //xhrFields: {withCredentials: true},
                           context: this,
                           data: JSON.stringify({username: this.state.username, password: this.state.password})
                       }).done(function(resp){

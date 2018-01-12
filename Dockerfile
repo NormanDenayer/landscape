@@ -16,7 +16,7 @@ RUN python3 setup.py install
 RUN mkdir /data && touch /data/app.db
 RUN apk del git python3-dev musl-dev gcc
 
-CMD ["flask", "run", "-h", "0.0.0.0", "-p", "5000"]
+CMD ["flask", "run", "-h", "0.0.0.0", "-p", "5000", "--with-threads"]
 EXPOSE 5000
 VOLUME /data
 

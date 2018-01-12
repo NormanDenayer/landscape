@@ -237,16 +237,16 @@ async def refresh_hourly():
         await asyncio.gather(*futures)
 
 
-@app.before_first_request
-def running_jobs():
-    sched = AsyncIOScheduler(timezone=utc)
-    sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
-    sched.add_job(refresh_hourly, 'interval', hours=10, id='refresh_hourly')
-    sched.start()
-    logger.info('background jobs started')
+#@app.before_first_request
+#def running_jobs():
+sched = AsyncIOScheduler(timezone=utc)
+sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
+sched.add_job(refresh_hourly, 'interval', hours=10, id='refresh_hourly')
+sched.start()
+logger.info('background jobs started')
 
-    import threading
-    try:
-        threading.Thread(target=asyncio.get_event_loop().run_forever).start()
-    except (KeyboardInterrupt, SystemExit):
-        pass
+import threading
+try:
+    threading.Thread(target=asyncio.get_event_loop().run_forever).start()
+except (KeyboardInterrupt, SystemExit):
+    pass
