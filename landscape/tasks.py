@@ -4,15 +4,16 @@ import hashlib
 import datetime
 import re
 import asyncio
+import threading
 import aiohttp
-from pytz import utc, timezone
+import feedparser
+import peony
+from functools import partial
+from pytz import timezone
 from lxml import html, etree
 from operator import itemgetter
 from landscape import app, db
 from landscape.models import Widget, WidgetType
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import feedparser
 
 
 logger = app.logger
@@ -22,6 +23,9 @@ HASH_URL = lambda url: hashlib.sha1(url).hexdigest()
 
 
 class ParsingError(Exception): pass
+
+
+class NoRerun(Exception): pass
 
 
 class Namespace:
@@ -160,37 +164,76 @@ async def refresh_feed(widget, *, parser):
     if not widget.title:
         widget.title = channel['title']
     widget.content = json.dumps({'channel': channel,'items': content})
-    db.session.commit()
+    try:
+        db.session.commit()
+    except:
+        logger.exception('fail to commit')
+        raise NoRerun()
     logger.debug('widget %r update with %r', widget, content)
 
 
-async def refresh_widgets():
-    logger.info('refreshing feeds')
-    futures = []
-    with app.app_context():
-        widgets = Widget.query.all()
-        for widget in widgets:
-            logger.info('refreshing %r', widget)
-            if widget.type == WidgetType.FEED:
-                if 'www.tf1.fr' in widget.uri.lower():
-                    parser = tf1_feed_parser
-                else:
-                    parser = general_feed_parser
-                fut = refresh_feed(widget, parser=parser)
-                futures.append(fut)
-        await asyncio.gather(*futures)
+api_key = app.config['TWITTER']['api_key']
+api_secret = app.config['TWITTER']['api_secret']
+
+
+async def refresh_tweets(widget):
+    content = json.loads(widget.content)
+    access_token = content['access_token']
+    access_secret = content['access_secret']
+    if 'items' not in content:
+        content['items'] = []
+
+    client = peony.PeonyClient(consumer_key=api_key, consumer_secret=api_secret,
+                               access_token=access_token, access_token_secret=access_secret)
+
+    # is an asynchronous context (StreamContext)
+    async with client.userstream.user.get(stall_warnings="true", replies="all") as stream:
+        # stream is an asynchronous iterator (StreamResponse)
+        async for tweet in stream:
+            if 'text' not in tweet or 'event' in tweet:
+                continue
+            content['items'] = [tweet] + content['items'][:49]
+            widget.content = json.dumps(content)
+            db.session.commit()
+
+
+async def refresh_widget(widget):
+    logger.info('refreshing %r', widget)
+    if widget.type == WidgetType.FEED:
+        if 'www.tf1.fr' in widget.uri.lower():
+            parser = tf1_feed_parser
+        else:
+            parser = general_feed_parser
+        await refresh_feed(widget, parser=parser)
+
+    elif widget.type == WidgetType.TWITTER:
+        await refresh_tweets(widget)
+
+
+async def run_task(ttl, func, loop):
+    try:
+        await func()
+    except NoRerun:
+        logger.info('stop refreshing')
+        return
+    except: pass
+
+    loop.call_later(ttl, run_task, func, ttl, loop)
 
 
 @app.before_first_request
 def running_jobs():
-    sched = AsyncIOScheduler(timezone=utc)
-    sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
-    sched.start()
+    loop = asyncio.get_event_loop()
+
+    with app.app_context():
+        widgets = Widget.query.all()
+        for widget in widgets:
+            loop.call_soon(run_task(widget.refresh_freq, partial(refresh_widget, widget), loop))
+
     logger.info('background jobs started')
 
-    import threading
     #  Execution will block here until Ctrl+C (Ctrl+Break on Windows) is pressed.
     try:
-        threading.Thread(target=asyncio.get_event_loop().run_forever).start()
+        threading.Thread(target=loop.run_forever).start()
     except (KeyboardInterrupt, SystemExit):
         pass
