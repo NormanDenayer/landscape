@@ -10,6 +10,8 @@ class WidgetType(enum.Enum):
     FEED = 1
     LINK = 2
     TODO = 3
+    ESPACE_FAMILLE = 4
+    TWITTER = 5
 
 
 class Widget(db.Model):
@@ -31,7 +33,7 @@ class Widget(db.Model):
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
 
-    def __init__(self, type, title, user_id, uri=None, refresh_freq=None, x=None, y=None, height=None, width=None):
+    def __init__(self, type, title, user_id, uri=None, refresh_freq=None, content=None, x=None, y=None, height=None, width=None):
         self.type = type
         self.uri = uri
         self.title = title
@@ -41,6 +43,7 @@ class Widget(db.Model):
         self.height = height
         self.width = width
         self.user_id = user_id
+        self.content = content
 
     def __repr__(self):
         return f'<Widget.{self.type} {self.title} for user {self.user_id}>'

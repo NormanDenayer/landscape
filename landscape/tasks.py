@@ -164,6 +164,43 @@ async def refresh_feed(widget, *, parser):
     logger.debug('widget %r update with %r', widget, content)
 
 
+async def refresh_espace_famille(widget):
+    url = 'https://www.espace-citoyens.net/bordeaux/espace-citoyens/'
+    content = json.loads(widget.content) if widget.content else {}
+    async with aiohttp.ClientSession() as s:
+        # get the login form
+        r = await s.get(url)
+        assert r.status == 200
+        root = html.fromstring(await r.text())
+        root.make_links_absolute(url)
+        assert len(root.forms) >= 1
+        login_form = root.forms[0]
+        login_form.fields.update({'username': content['username'], 'password': content['password']})
+        # login
+        r1 = await s.post(login_form.action, data={k: v for k, v in login_form.fields.items()})
+        assert r1.status == 200
+        # fetch info
+        items = []
+        try:
+            root = html.fromstring(await r1.text())
+            for bullet in root.find_class('smarties'):
+                match = re.match(r'^(\d+)\s+([\w ]+)$', bullet.getparent().text_content().strip())
+                if match is None:
+                    continue
+                count, category = match.groups()
+                items.append((count, category))
+        except:
+            logger.exception('fail at fetching information')
+        # logout
+        await s.get('https://www.espace-citoyens.net/bordeaux/espace-citoyens/Home/LogOff')
+    if not widget.title:
+        widget.title = 'Espace Famille Bordeaux'
+    content.update({'items': items})
+    widget.content = json.dumps(content)
+    db.session.commit()
+    logger.debug('widget %r update with %r', widget, content)
+
+
 async def refresh_widgets():
     logger.info('refreshing feeds')
     futures = []
@@ -171,13 +208,32 @@ async def refresh_widgets():
         widgets = Widget.query.all()
         for widget in widgets:
             logger.info('refreshing %r', widget)
+
             if widget.type == WidgetType.FEED:
                 if 'www.tf1.fr' in widget.uri.lower():
                     parser = tf1_feed_parser
                 else:
                     parser = general_feed_parser
                 fut = refresh_feed(widget, parser=parser)
-                futures.append(fut)
+            else:
+                continue
+            futures.append(fut)
+        await asyncio.gather(*futures)
+
+
+async def refresh_hourly():
+    logger.info('refreshing hourly feeds')
+    futures = []
+    with app.app_context():
+        widgets = Widget.query.all()
+        for widget in widgets:
+            logger.info('refreshing %r', widget)
+
+            if widget.type == WidgetType.ESPACE_FAMILLE:
+                fut = refresh_espace_famille(widget)
+            else:
+                continue
+            futures.append(fut)
         await asyncio.gather(*futures)
 
 
@@ -185,11 +241,11 @@ async def refresh_widgets():
 def running_jobs():
     sched = AsyncIOScheduler(timezone=utc)
     sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
+    sched.add_job(refresh_hourly, 'interval', hours=10, id='refresh_hourly')
     sched.start()
     logger.info('background jobs started')
 
     import threading
-    #  Execution will block here until Ctrl+C (Ctrl+Break on Windows) is pressed.
     try:
         threading.Thread(target=asyncio.get_event_loop().run_forever).start()
     except (KeyboardInterrupt, SystemExit):

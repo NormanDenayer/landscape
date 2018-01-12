@@ -126,9 +126,22 @@ def api_widgets(user_id):
     if request.method == 'CREATE':
         coord = Widget.new_coordinates(session['user_id'])
         new_widget = request.json['widget']
-        if new_widget['type'] == str(WidgetType.FEED.value):
+        if new_widget['type'] == WidgetType.FEED.value:
             widget = Widget(type=WidgetType.FEED, user_id=session['user_id'], uri=new_widget['url'],
                             title=new_widget['title'], refresh_freq=new_widget.get('freq', 60), **coord)
+        elif new_widget['type'] == WidgetType.ESPACE_FAMILLE.value:
+            widget = Widget(
+                type=WidgetType.ESPACE_FAMILLE,
+                user_id=session['user_id'],
+                uri='',
+                title='Espace Famille',
+                refresh_freq=new_widget.get('freq', 60),
+                content=json.dumps({
+                    'username': new_widget['content'].get('username'),
+                    'password': new_widget['content'].get('password'),
+                    'items': [],
+                }),
+                **coord)
         else:
             return abort(status=422, description='Invalid type')
 
