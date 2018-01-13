@@ -1,17 +1,17 @@
 import json
+import os
 import time
 import hashlib
 import datetime
 import re
 import asyncio
 import aiohttp
-from pytz import utc, timezone
+from pytz import timezone
 from lxml import html, etree
 from operator import itemgetter
 from landscape import app, db
 from landscape.models import Widget, WidgetType
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import feedparser
 
 
@@ -45,7 +45,7 @@ def limit_html_description(text, limit):
     """
     try:
         node = html.fromstring(text)
-    except etree.ParseError:
+    except (etree.ParseError, etree.ParserError):
         return text[:limit]
     text_len = 0
     result = ''
@@ -146,7 +146,7 @@ async def refresh_feed(widget, *, parser):
         pub_date = item.get('published_parsed', item.get('updated_parsed', None))
         i = {
             'id': HASH_URL(item.link.encode()),
-            'description': limit_html_description(item.description, 100),
+            'description': limit_html_description(item.get('description', ''), 100),
             'link': item.link,
             'title': item.title,
             'picture': picture,
@@ -202,51 +202,63 @@ async def refresh_espace_famille(widget):
 
 
 async def refresh_widgets():
-    logger.info('refreshing feeds')
-    futures = []
-    with app.app_context():
-        widgets = Widget.query.all()
-        for widget in widgets:
-            logger.info('refreshing %r', widget)
+    try:
+        logger.info('refreshing feeds')
+        futures = []
+        with app.app_context():
+            widgets = Widget.query.all()
+            for widget in widgets:
+                logger.info('refreshing %r', widget)
 
-            if widget.type == WidgetType.FEED:
-                if 'www.tf1.fr' in widget.uri.lower():
-                    parser = tf1_feed_parser
+                if widget.type == WidgetType.FEED:
+                    if 'www.tf1.fr' in widget.uri.lower():
+                        parser = tf1_feed_parser
+                    else:
+                        parser = general_feed_parser
+                    fut = refresh_feed(widget, parser=parser)
                 else:
-                    parser = general_feed_parser
-                fut = refresh_feed(widget, parser=parser)
-            else:
-                continue
-            futures.append(fut)
-        await asyncio.gather(*futures)
+                    continue
+                futures.append(fut)
+            await asyncio.gather(*futures)
+    except:
+        logger.exception('fail at refreshing feeds')
+    await asyncio.sleep(delay=60 * 5) # every 5 minutes
+    asyncio.ensure_future(refresh_widgets)
 
 
 async def refresh_hourly():
-    logger.info('refreshing hourly feeds')
-    futures = []
-    with app.app_context():
-        widgets = Widget.query.all()
-        for widget in widgets:
-            logger.info('refreshing %r', widget)
+    try:
+        logger.info('refreshing hourly feeds')
+        futures = []
+        with app.app_context():
+            widgets = Widget.query.all()
+            for widget in widgets:
+                logger.info('refreshing %r', widget)
 
-            if widget.type == WidgetType.ESPACE_FAMILLE:
-                fut = refresh_espace_famille(widget)
-            else:
-                continue
-            futures.append(fut)
-        await asyncio.gather(*futures)
+                if widget.type == WidgetType.ESPACE_FAMILLE:
+                    fut = refresh_espace_famille(widget)
+                else:
+                    continue
+                futures.append(fut)
+            await asyncio.gather(*futures)
+    except:
+        logger.exception('fail at refreshing hourly')
+    await asyncio.sleep(delay=60 * 60) # every hour
+    asyncio.ensure_future(refresh_hourly)
 
 
-#@app.before_first_request
-#def running_jobs():
-sched = AsyncIOScheduler(timezone=utc)
-sched.add_job(refresh_widgets, 'interval', minutes=1, id='refresh_feed')
-sched.add_job(refresh_hourly, 'interval', hours=10, id='refresh_hourly')
-sched.start()
-logger.info('background jobs started')
+def running_jobs():
+    loop = asyncio.get_event_loop()
+    asyncio.ensure_future(refresh_widgets())
+    asyncio.ensure_future(refresh_hourly())
+    logger.info('background jobs started')
 
-import threading
-try:
-    threading.Thread(target=asyncio.get_event_loop().run_forever).start()
-except (KeyboardInterrupt, SystemExit):
-    pass
+    import threading
+    try:
+        threading.Thread(target=loop.run_forever).start()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+
+
+if os.environ.get('START_BACKGROUND', False) in ('1', 'y'):
+    running_jobs()
