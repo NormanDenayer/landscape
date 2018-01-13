@@ -113,6 +113,7 @@ def tf1_feed_parser(text):
 
 
 async def refresh_feed(widget, *, parser):
+    title = widget.title
     content = json.loads(widget.content)['items'] if widget.content else []
     known = [i['id'] for i in content]
 
@@ -123,16 +124,18 @@ async def refresh_feed(widget, *, parser):
                 answer = await resp.text(errors='ignore')
                 try:
                     parsed_answer = parser(answer)
+                    if not title:
+                        widget.title = parsed_answer.feed.title
                 except ParsingError:
                     return
         except aiohttp.client_exceptions.ServerDisconnectedError as e:
             logger.exception(f'it seems the server disconnected unexpectedly: {widget.uri} - {e}')
             return
-    channel = {
-        'title': parsed_answer.feed.title,
-        'description': parsed_answer.feed.get('description', ''),
-        'ttl': parsed_answer.feed.get('ttl', '60'),
-    }
+        channel = {
+            'title': parsed_answer.feed.title,
+            'description': parsed_answer.feed.get('description', ''),
+            'ttl': parsed_answer.feed.get('ttl', '60'),
+        }
     for item in parsed_answer.entries:
         if HASH_URL(item.link.encode()) in known:
             continue
@@ -157,8 +160,6 @@ async def refresh_feed(widget, *, parser):
     if content and content[0]['at'] is not None:
         content = sorted(content, key=itemgetter('at'), reverse=True)
     content = content[:20]
-    if not widget.title:
-        widget.title = channel['title']
     widget.content = json.dumps({'channel': channel,'items': content})
     db.session.commit()
     logger.debug('widget %r update with %r', widget, content)
@@ -223,7 +224,7 @@ async def refresh_widgets():
     except:
         logger.exception('fail at refreshing feeds')
     await asyncio.sleep(delay=60 * 5) # every 5 minutes
-    asyncio.ensure_future(refresh_widgets)
+    asyncio.ensure_future(refresh_widgets())
 
 
 async def refresh_hourly():
@@ -244,7 +245,7 @@ async def refresh_hourly():
     except:
         logger.exception('fail at refreshing hourly')
     await asyncio.sleep(delay=60 * 60) # every hour
-    asyncio.ensure_future(refresh_hourly)
+    asyncio.ensure_future(refresh_hourly())
 
 
 def running_jobs():
