@@ -4,7 +4,6 @@
   "private": true,
   "dependencies": {
     "babel-polyfill": "^6.26.0",
-    "jquery": "^3.2.1",
     "react": "^15.6.2",
     "react-addons-update": "^15.6.2",
     "react-bootstrap": "^0.31.5",

@@ -1,21 +1,19 @@
 import json
-import os
+import logging
 import time
 import hashlib
 import datetime
 import re
 import asyncio
 import aiohttp
+import secrets
+import feedparser
+
 from pytz import timezone
 from lxml import html, etree
 from operator import itemgetter
-from landscape import app, db
-from landscape.models import Widget, WidgetType
 
-import feedparser
-
-
-logger = app.logger
+logger = logging.getLogger('landscape.tasks')
 TMC_DATE = re.compile(r'(\w+) (\d{1,2}) (\w+) (\d{4})')
 MOIS_2_MONTH = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE']
 HASH_URL = lambda url: hashlib.sha1(url).hexdigest()
@@ -112,7 +110,7 @@ def tf1_feed_parser(text):
     return result
 
 
-async def refresh_feed(widget, *, parser):
+async def refresh_feed(widget, *, db, parser):
     title = widget.title
     content = json.loads(widget.content)['items'] if widget.content else []
     known = [i['id'] for i in content]
@@ -161,11 +159,11 @@ async def refresh_feed(widget, *, parser):
         content = sorted(content, key=itemgetter('at'), reverse=True)
     content = content[:20]
     widget.content = json.dumps({'channel': channel,'items': content})
-    db.session.commit()
+    db.update_widget(widget)
     logger.debug('widget %r update with %r', widget, content)
 
 
-async def refresh_espace_famille(widget):
+async def refresh_espace_famille(widget, db):
     url = 'https://www.espace-citoyens.net/bordeaux/espace-citoyens/'
     content = json.loads(widget.content) if widget.content else {}
     async with aiohttp.ClientSession() as s:
@@ -189,7 +187,15 @@ async def refresh_espace_famille(widget):
                 if match is None:
                     continue
                 count, category = match.groups()
-                items.append((count, category))
+                items.append({
+                    'id': secrets.token_hex(32),
+                    'description': '',
+                    'link': url,
+                    'title': f'{count} in {category}',
+                    'picture': None,
+                    'at': datetime.datetime.now().replace(tzinfo=timezone('Europe/Brussels')).isoformat(),
+                    'read': False,
+                })
         except:
             logger.exception('fail at fetching information')
         # logout
@@ -198,68 +204,55 @@ async def refresh_espace_famille(widget):
         widget.title = 'Espace Famille Bordeaux'
     content.update({'items': items})
     widget.content = json.dumps(content)
-    db.session.commit()
+    db.update_widget(widget)
     logger.debug('widget %r update with %r', widget, content)
 
 
-async def refresh_widgets():
+async def refresh_widgets(db):
     try:
         logger.info('refreshing feeds')
         futures = []
-        with app.app_context():
-            widgets = Widget.query.all()
-            for widget in widgets:
-                logger.info('refreshing %r', widget)
 
-                if widget.type == WidgetType.FEED:
-                    if 'www.tf1.fr' in widget.uri.lower():
-                        parser = tf1_feed_parser
-                    else:
-                        parser = general_feed_parser
-                    fut = refresh_feed(widget, parser=parser)
+        widgets = db.widgets
+        for widget in widgets:
+            if widget.type == 'FEED':
+                if 'www.tf1.fr' in widget.uri.lower():
+                    parser = tf1_feed_parser
                 else:
-                    continue
-                futures.append(fut)
-            await asyncio.gather(*futures)
+                    parser = general_feed_parser
+                logger.info(f'refreshing {widget.title}')
+                fut = refresh_feed(widget, parser=parser, db=db)
+            else:
+                continue
+            futures.append(fut)
+        await asyncio.gather(*futures)
     except:
         logger.exception('fail at refreshing feeds')
     await asyncio.sleep(delay=60 * 5) # every 5 minutes
-    asyncio.ensure_future(refresh_widgets())
+    asyncio.ensure_future(refresh_widgets(db))
 
 
-async def refresh_hourly():
+async def refresh_hourly(db):
     try:
         logger.info('refreshing hourly feeds')
         futures = []
-        with app.app_context():
-            widgets = Widget.query.all()
-            for widget in widgets:
-                logger.info('refreshing %r', widget)
 
-                if widget.type == WidgetType.ESPACE_FAMILLE:
-                    fut = refresh_espace_famille(widget)
-                else:
-                    continue
-                futures.append(fut)
-            await asyncio.gather(*futures)
+        widgets = db.widgets
+        for widget in widgets:
+            if widget.type == 'ESPACE_FAMILLE':
+                logger.info(f'refreshing {widget.title}')
+                fut = refresh_espace_famille(widget, db)
+            else:
+                continue
+            futures.append(fut)
+        await asyncio.gather(*futures)
     except:
         logger.exception('fail at refreshing hourly')
     await asyncio.sleep(delay=60 * 60) # every hour
-    asyncio.ensure_future(refresh_hourly())
+    asyncio.ensure_future(refresh_hourly(db))
 
 
-def running_jobs():
-    loop = asyncio.get_event_loop()
-    asyncio.ensure_future(refresh_widgets())
-    asyncio.ensure_future(refresh_hourly())
+def running_bg_jobs(db):
+    asyncio.ensure_future(refresh_widgets(db))
+    asyncio.ensure_future(refresh_hourly(db))
     logger.info('background jobs started')
-
-    import threading
-    try:
-        threading.Thread(target=loop.run_forever).start()
-    except (KeyboardInterrupt, SystemExit):
-        pass
-
-
-if os.environ.get('START_BACKGROUND', False) in ('1', 'y'):
-    running_jobs()

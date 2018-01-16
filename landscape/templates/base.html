@@ -8,24 +8,6 @@
         <title>Landscape</title>
     </head>
     <body>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            <!-- Categories: success (green), info (blue), warning (yellow), danger (red) -->
-            {% if messages %}
-                {%- for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissable fade in" role="alert">
-                      <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                      {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
         {% block body %}{% endblock %}
-
-        <script type="text/javascript">
-            $(".alert").delay(3000).slideUp(200, function() {
-                $(this).alert('close');
-            });
-        </script>
     </body>
 </html>

@@ -1,43 +1,35 @@
 import json
-from landscape import app, db
-from landscape.models import User, Widget, WidgetType
-from flask import request, jsonify, abort, session, url_for
-from flask_login import logout_user, login_user, login_required
-from sqlalchemy.sql import or_
+import logging
 
-API_VERSION = '01'
-API_PREFIX = '/api/v' + API_VERSION
+from aiohttp import web
+from landscape.controller import login_required, Widget
+
+logger = logging.getLogger('aiohttp.access')
 
 
-@app.route(API_PREFIX + '/login', methods=['POST'], endpoint='api_login')
-def api_login():
-    """
-    Create a new session for users identified with username/password
-    and reply with the appropriate cookie (containing the session id) 
-    """
-    username = request.json['username']
-    password = request.json['password']
-    registered_user = User.query.filter(or_(User.username == username, User.email == username),
-                                        User.password == User.encode_password(password)).first()
-    if registered_user is None:
-        abort(status=401)  # 401 Unauthorized
-    login_user(registered_user)
-    return jsonify({'success': True, 'user_id': registered_user.id})
+async def empty_body(request):
+    return web.Response()
 
 
-@app.route(API_PREFIX + '/logout', methods=['GET'], endpoint='api_logout')
+async def api_login(request):
+    content = await request.json()
+    username = content['username']
+    password = content['password']
+    user = request.app['db'].get_user(username, password)
+
+    if user is None:
+        return web.Response(status=401)
+    return web.json_response({'token': user.token, 'id': user.user_id})
+
+
 @login_required
-def api_logout():
-    """
-    Logout the current user.
-    """
-    logout_user()
-    return jsonify({'success': True})
+async def api_logout(request, user):
+    request.app['db'].reset_user_token(user)
+    return web.Response()
 
 
-@app.route(API_PREFIX + '/user/<user_id>/widget/<widget_id>', methods=['GET', 'POST', 'DELETE'], endpoint='api_widget')
 @login_required
-def api_widget(user_id, widget_id):
+async def api_widget(request, user):
     """
     Handle RUD operation on a widget.
     (note: for (C)reation see /widgets)
@@ -45,106 +37,120 @@ def api_widget(user_id, widget_id):
     POST: update widget details (title, url).
     DELETE: remove a widget.
     """
-    if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
-        return abort(status=403)
-    widget = Widget.query.filter_by(user_id=user_id, id=widget_id).first()
+    user_id = int(request.match_info['user_id'])
+    if user.user_id != user_id:  # ok you are logged but you are not god!
+        return web.Response(status=403)
+
+    widget = request.app['db'].get_widget(user_id, request.match_info['widget_id'])
     if widget is None:
-        return abort(status=404)
+        return web.Response(status=404)
 
     if request.method == 'GET':
-        return jsonify({'widget': widget.to_dict()})
+        return web.json_response({'widget': widget.as_dict()})
 
     if request.method == 'POST':  # update an individual widget
-        widget.title = request.json.get('title', None) or widget.title
-        widget.uri = request.json.get('uri', None) or widget.uri
+        content = await request.json()
+        widget.title = content.get('title', None) or widget.title
+        widget.uri = content.get('uri', None) or widget.uri
+        request.app['db'].update_widget(widget)
 
     if request.method == 'DELETE':
-        db.session.delete(widget)
-    db.session.commit()
-    return jsonify({'widget': widget.to_dict(limited=True)})
+        request.app['db'].delete_widget(widget.widget_id)
+    return web.json_response({'widget': widget.as_dict(exclude=['content'])})
 
 
-@app.route(API_PREFIX + '/user/<user_id>/widget/<widget_id>/item/<item_id>', methods=['POST'], endpoint='api_widget_item')
-def api_widget_item(user_id, widget_id, item_id):
-    if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
-        return abort(status=403)
-    widget = Widget.query.filter_by(user_id=user_id, id=widget_id).first()
+@login_required
+async def api_widget_item(request, user):
+    user_id = int(request.match_info['user_id'])
+    if user.user_id != user_id:  # ok you are logged but you are not god!
+        return web.Response(status=403)
+
+    widget = request.app['db'].get_widget(user_id, request.match_info['widget_id'])
     if widget is None:
-        return abort(status=404)
+        return web.Response(status=404)
+
+    item_id = request.match_info['item_id']
     content = json.loads(widget.content)
+    request_data = await request.json()
     for i in content['items']:
         if i['id'] == item_id:
             i.update({
-                'read': request.json.get('read', i.get('read', False)),
+                'read': request_data.get('read', i.get('read', False)),
             })
             break
     else:
-        return abort(status=404)
+        return web.Response(status=404)
     widget.content = json.dumps(content)
-    db.session.commit()
-    return jsonify({'widget': widget.to_dict(limited=True)})
+    request.app['db'].update_widget(widget)
+    return web.json_response({'widget': widget.as_dict(exclude=['content'])})
 
 
-@app.route(API_PREFIX + '/user/<user_id>/widgets', methods=['GET', 'CREATE', 'POST'], endpoint='api_widgets')
 @login_required
-def api_widgets(user_id):
+async def api_widgets(request, user):
     """
     Handle operations on the widgets as collection (aka grid).
     GET: retrieve the list of widgets + position in the grid).
     CREATE: add a widget on the grid.
     POST: update widgets positions.
     """
-    if str(session['user_id']) != user_id:  # ok you are logged but you are not god!
-        return abort(status=403)
+    user_id = int(request.match_info['user_id'])
+    if user.user_id != user_id:  # ok you are logged but you are not god!
+        return web.Response(status=403)
+
     # return the widgets configured (if GET)
     if request.method == 'GET':
-        db_widgets = Widget.query.filter_by(user_id=session['user_id']).all()
         widgets = []
-        for w in db_widgets:
-            d = w.to_dict(limited=True)
-            d['url'] = url_for('api_widget', user_id=session['user_id'], widget_id=w.id, _external=True)
+        for w in request.app['db'].get_widgets(user.user_id):
+            d = w.as_dict(exclude=['content'])
+            d['url'] = str(request.app.router['api_widget'].url_for(user_id=user.user_id, widget_id=w.widget_id))
             widgets.append(d)
-        return jsonify({'widgets': widgets})
-    # update the widgets (if POST)
-    if request.method == 'POST':
-        db_widgets = Widget.query.filter_by(user_id=session['user_id']).all()
-        db_widgets = {w.id: w for w in db_widgets}
-        for widget in request.json['widgets']:
+        return web.json_response({'widgets': widgets})
+    # update the widgets (if PUT)
+    content = await request.json()
+    if request.method == 'PUT':
+        db_widgets = {w.widget_id: w for w in request.app['db'].get_widgets(user_id)}
+        for widget in content['widgets']:
             try:
                 db_widget = db_widgets[int(widget['i'])]
             except (KeyError, ValueError):
-                app.logger.warning('unknown widget (possible threat): %s for %s', widget['i'], session['user_id'])
+                logger.warning('unknown widget (possible threat): %s for %s', widget['i'], user_id)
                 continue
             db_widget.x = widget['x']
             db_widget.y = widget['y']
             db_widget.height = widget['h']
             db_widget.width = widget['w']
-        db.session.commit()
-        return jsonify({'success': True})
+            request.app['db'].update_widget(db_widget)
+        return web.Response()
 
-    # create a new widget (if CREATE)
-    if request.method == 'CREATE':
-        coord = Widget.new_coordinates(session['user_id'])
-        new_widget = request.json['widget']
-        if new_widget['type'] == WidgetType.FEED.value:
-            widget = Widget(type=WidgetType.FEED, user_id=session['user_id'], uri=new_widget['url'],
-                            title=new_widget['title'], refresh_freq=new_widget.get('freq', 60), **coord)
-        elif new_widget['type'] == WidgetType.ESPACE_FAMILLE.value:
+    # create a new widget (if POST)
+    if request.method == 'POST':
+        coord = Widget.new_coordinates(request.app['db'].get_widgets(user_id))
+        new_widget = content['widget']
+        if new_widget['type'] == 1:
             widget = Widget(
-                type=WidgetType.ESPACE_FAMILLE,
-                user_id=session['user_id'],
+                type='FEED',
+                user_id=user_id,
+                uri=new_widget['url'],
+                title=new_widget['title'],
+                refresh_freq=new_widget.get('freq', 60),
+                **coord
+            )
+        elif new_widget['type'] == 4:
+            widget = Widget(
+                type='ESPACE_FAMILLE',
+                user_id=user_id,
                 uri='',
                 title='Espace Famille',
-                refresh_freq=new_widget.get('freq', 60),
+                refresh_freq=new_widget.get('freq', 5*60*60),
                 content=json.dumps({
                     'username': new_widget['content'].get('username'),
                     'password': new_widget['content'].get('password'),
                     'items': [],
                 }),
-                **coord)
+                **coord
+            )
         else:
-            return abort(status=422, description='Invalid type')
+            return web.Response(status=422)
 
-        db.session.add(widget)
-        db.session.commit()
-        return jsonify({'success': True, 'widget': widget.to_dict(limited=True)})
+        request.app['db'].add_widget(widget)
+        return web.json_response({'widget': widget.as_dict(exclude=['content'])})

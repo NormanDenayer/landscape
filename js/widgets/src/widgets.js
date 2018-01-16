@@ -18,51 +18,97 @@ import update from 'react-addons-update';
 import './widgets.css';
 import '../node_modules/react-grid-layout/css/styles.css';
 import '../node_modules/react-resizable/css/styles.css';
-import $ from 'jquery';
 import {Responsive, WidthProvider} from 'react-grid-layout';
 const ResponsiveReactGridLayout = WidthProvider(Responsive);
 
-const API_URL_PREFIX = process.env.NODE_ENV === 'production'?window.location.origin:'http://127.0.0.1:5001';
+const API_URL_PREFIX = process.env.NODE_ENV === 'production'?window.location.origin:'http://127.0.0.1:5000';
 const BASE_API_URL = API_URL_PREFIX + '/api/v01';
 
+
+export function parseJSON(response) {
+  return response.json()
+}
+
+export function checkStatus(response) {
+  if (response.status >= 200 && response.status < 300) {
+    return response
+  } else {
+    //let error = null;
+    let contentType = response.headers.get("content-type");
+    if(contentType && contentType.indexOf("application/json") !== -1) {
+        return response.json().then(function(json) {
+          const message = json.error || json.errors || response.statusText;
+          throw new Error(message);
+        });
+    }
+
+    let error = new Error(response.statusText);
+    error.response = response;
+    throw error
+  }
+}
 
 class Widget extends Component {
   constructor(props) {
       super(props);
-      this.state = {dirty: true, content: null};
+      this.state = {dirty: true, items: null, title: null};
       this._loadContent = this._loadContent.bind(this);
+      this.onItemClick = this.onItemClick.bind(this);
   }
+
   _loadContent(force) {
       if(!this.state.dirty && !force){
           console.log('not dirty enough');
           return;
       }
-      $.ajax({
-          url: this.props.data.url,
+      fetch(API_URL_PREFIX + this.props.data.url, {
           method: 'get',
-          servercontentType: 'json',
-          xhrFields: {withCredentials: true},
-          context: this
-      }).done(function(resp) {
-          console.log(resp);
+          headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer ' + this.props.auth_token
+          }
+      }).then(checkStatus)
+      .then(parseJSON)
+      .then(data => {
+          let content = JSON.parse(data.widget.content);
+          let title = content.channel?content.channel.title:data.widget.title;
+          if(data.widget.updated_on) {
+              title += ' (' + data.widget.updated_on + ')'
+          }
           this.setState({
-              content: {
-                  title: resp.widget.content.channel?resp.widget.content.channel.title:resp.widget.title,
-                  items: resp.widget.content.items,
-              },
               dirty: false,
+              title: title,
+              items: content.items,
           });
-          setTimeout(() => {this._loadContent(true)}, 60000);
-      }).fail(function() {
-          console.error('fail to fetch: ' + this.props.data.url);
-          setTimeout(this._loadContent, 60000);
+          setTimeout(() => this._loadContent(true), 60 * 1000);
+      })
+      .catch(error => {
+          console.error(error);
+          setTimeout(() => this._loadContent(true), 15 * 60 * 1000);
       });
   }
+
   componentDidMount() {
       this._loadContent();
   }
+
+  onItemClick(item) {
+      fetch(API_URL_PREFIX + this.props.data.url + '/item/' + item.id, {
+          method: 'post',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + this.props.auth_token
+          },
+          body: JSON.stringify({read: true})
+      }).then(checkStatus)
+      .then(() => {
+          let index = this.state.items.findIndex(i => i.id === item.id);
+          this.setState({items: update(this.state.items, {[index]: {read: {$set: true}}})});
+      });
+  }
+
   render() {
-      if(this.state.content === null) {
+      if(this.state.items === null) {
           return (<div className="container-fluid" style={{height: "inherit"}}>
               <Panel header='*none*' bsStyle="info">
                   <div className="container-fluid">
@@ -72,9 +118,9 @@ class Widget extends Component {
       }
 
       return (<div className="container-fluid" style={{height: "inherit"}}>
-          <Panel header={this.state.content.title || "<title>"} bsStyle="info">
+          <Panel header={this.state.title || "<title>"} bsStyle="info">
               <div className="container-fluid" onMouseDown={ e => e.stopPropagation() }>
-                  {this.state.content.items.map((item) => {
+                  {this.state.items.map((item, i) => {
                       let image = '';
                       let image_desc = '';
                       let pub_time = new Date(item.at);
@@ -90,25 +136,12 @@ class Widget extends Component {
                         </div>);
                       let title = (<a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title}</a>);
                       let popover = (<Popover id={'popover-' + item.id} title={title}>{description}</Popover>);
-                      return (<div className="row" key={item.id}>
+                      return (<div className="row" key={i}>
                         <div className={"span4 " + ((item.read)?"read":"")}>
                             <p>
                                 {image}
                                 <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
-                                    <a onClick={() => {
-                                        $.ajax({
-                                            url: this.props.data.url + '/item/' + item.id,
-                                            method: 'POST',
-                                            contentType: 'application/json',
-                                            servercontentType: 'json',
-                                            xhrFields: {withCredentials: true},
-                                            context: this,
-                                            data: JSON.stringify({read: true})
-                                        }).done(() => {
-                                            let index = this.state.content.items.findIndex(i => i.id === item.id);
-                                            this.setState({content: update(this.state.content, {items: {[index]: {read: {$set: true}}}})});
-                                        })
-                                    }}>{item.title}</a>
+                                    <a onClick={() => this.onItemClick(item)}>{item.title}</a>
                                 </OverlayTrigger>
                             </p>
                         </div>
@@ -173,19 +206,16 @@ class NewWidgetModal extends Component {
     onSubmit(e) {
         e.preventDefault();
 
-        $.ajax({
-            url: BASE_API_URL + '/user/' + this.props.user_id + '/widgets',
-            method: 'CREATE',
-            contentType: 'application/json',
-            servercontentType: 'json',
-            xhrFields: {withCredentials: true},
-            context: this,
-            data: JSON.stringify({widget: this.state.widget})
-        }).done(function () {
-            this.onHide(true);
-        }).fail(function (xhr, exception) {
-            this.setState({errorText: xhr.status});
-        })
+        fetch(BASE_API_URL + '/user/' + this.props.user_id + '/widgets', {
+            method: 'post',
+            headers: {
+                'Authorization': 'Bearer ' + this.props.auth_token,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({widget: this.state.widget})
+        }).then(checkStatus)
+        .then(() => this.onHide(true))
+        .catch(error => this.setState({errorText: error.message}));
     }
 
     render() {
@@ -274,28 +304,48 @@ class UpdateWidgetModal extends NewWidgetModal {
     onSubmit(e) {
         e.preventDefault();
 
-        $.ajax({
-            url: BASE_API_URL + '/user/' + this.props.user_id + '/widget/' + this.state.widget.id,
-            method: 'POST',
-            contentType: 'application/json',
-            servercontentType: 'json',
-            xhrFields: {withCredentials: true},
-            context: this,
-            data: JSON.stringify({widget: this.state.widget})
-        }).done(function () {
-            this.onHide(true);
-        }).fail(function (xhr, exception) {
-            this.setState({errorText: xhr.status});
-        })
+        fetch(BASE_API_URL + '/user/' + this.props.user_id + '/widget/' + this.state.widget.widget_id, {
+            method: 'post',
+            headers: {
+                'Authorization': 'Bearer ' + this.props.auth_token,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({widget: this.state.widget})
+        }).then(checkStatus)
+        .then(() => this.onHide(true))
+        .catch(error => this.setState({errorText: error.message}));
     }
+}
+
+function setCookie(cname, cvalue, exdays) {
+    let d = new Date();
+    d.setTime(d.getTime() + (exdays*24*60*60*1000));
+    const expires = "expires="+ d.toUTCString();
+    document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+}
+
+function getCookie(cname) {
+    const name = cname + "=";
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const ca = decodedCookie.split(';');
+    for(let i = 0; i <ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) === 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
 }
 
 class Widgets extends Component {
   constructor(props) {
       super(props);
       this.state = {widgets: [], layout: {}, showAddWidget: false, showUpdateWidget: false, widget:undefined,
-          showLogin: false, username: undefined, password: undefined, loging_in: false,
-          errorText: undefined, user_id: undefined};
+          showLogin: false, username: undefined, password: undefined, loging_in: false, widgetsError: undefined,
+          errorText: undefined, user_id: undefined, loginError: undefined, user: undefined};
       this.loadGrid = this.loadGrid.bind(this);
       this.onRemoveItem = this.onRemoveItem.bind(this);
       this.onAddItem = this.onAddItem.bind(this);
@@ -306,38 +356,54 @@ class Widgets extends Component {
       this.createElement = this.createElement.bind(this);
   }
 
+  // get the user info out from local cookie (if possible)
   componentDidMount() {
-      this.loadGrid();
+      let value = getCookie("user");
+      if(value) {
+          this.setState({user: JSON.parse(value)});
+          setTimeout(this.loadGrid, 500);
+      }
   }
 
   loadGrid() {
-      $.ajax({
-          url: BASE_API_URL + '/user/' + this.state.user_id + '/widgets',
-          method:'GET',
-          servercontentType: 'json',
-          xhrFields: {withCredentials: true},
-          context: this
-      }).done(function(resp, statusText, xhr){
-          if(xhr.status === 200) {
-              this.setState({
-                  widgets: resp.widgets.map((w) => {
-                      w.w = w.width;
-                      w.h = w.height;
-                      w.i = w.id.toString();
-                      return w;
-                  })
-              })
+      this.setState({widgetsError: undefined});
+      fetch(BASE_API_URL + '/user/' + this.state.user.id + '/widgets', {
+          method: 'get',
+          headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer ' + this.state.user.token
           }
-      }).fail((xhr) => {
-          if(xhr.status === 401 || xhr.status === 0 || xhr.status === 403) {
-              this.setState({showLogin: true})
+      }).then(checkStatus)
+      .then(parseJSON)
+      .then(data => {
+          this.setState({widgets: data.widgets.map(w => {
+                  w.w = w.width;
+                  w.h = w.height;
+                  w.i = w.widget_id.toString();
+                  return w;
+              })})
+      })
+      .catch(error => {
+          if(error.response && (error.response.status === 401 || error.response.status === 403)) {
+              this.setState({widgetsError: error})
           }
-          console.error('-> login');
       });
   }
 
   onRemoveItem(el){
-      this.setState({widgets: this.state.widgets.filter(w => w.id !== el.id)});
+      let confirm_ = confirm('Are you sure you want to delete this widget?');
+      if(confirm_ !== true) {
+          return
+      }
+      this.setState({widgets: this.state.widgets.filter(w => w.widget_id !== el.widget_id)});
+      fetch(BASE_API_URL + '/user/' + this.state.user.id + '/widget/' + el.widget_id, {
+          method: 'delete',
+          headers: {
+              'Authorization': 'Bearer ' + this.state.user.token
+          }
+      }).then(checkStatus)
+      .then(() => this.setState({widgetDeleted: true}))
+      .catch(error => this.setState({widgetDelError: error}))
   }
 
   onUpdateItem(el){
@@ -348,8 +414,8 @@ class Widgets extends Component {
   }
 
   createElement(e){
-      return <div key={e.id}>
-          <Widget key={e.id} data={e} />
+      return <div key={e.widget_id}>
+          <Widget key={e.widget_id} data={e} auth_token={this.state.user.token} />
           <span className="remove glyphicon glyphicon-erase" onClick={this.onRemoveItem.bind(this, e)} />
           <span className="update glyphicon glyphicon-pencil" onClick={this.onUpdateItem.bind(this, e)} />
       </div>
@@ -362,20 +428,17 @@ class Widgets extends Component {
 
   onSaveGrid(e) {
       e.preventDefault();
-      $.ajax({
-          url: BASE_API_URL + '/user/' + this.state.user_id + '/widgets',
-          method:'POST',
-          servercontentType: 'json',
-          dataType: 'json',
-          contentType: 'application/json',
-          data: JSON.stringify({'widgets': this.state.layout}),
-          xhrFields: {withCredentials: true},
-          context: this
-      }).done(function(){
-          console.log('saving the grid')
-      }).fail(function(){
-          console.error('oups!!!');
-      });
+      this.setState({gridSaved: false, gridSaveError: undefined});
+      fetch(BASE_API_URL + '/user/' + this.state.user.id + '/widgets', {
+          method: 'put',
+          headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer ' + this.state.user.token
+          },
+          body: JSON.stringify({'widgets': this.state.layout})
+      }).then(checkStatus)
+      .then(() => this.setState({gridSaved: true}))
+      .catch(error => this.setState({gridSaveError: error}))
   }
 
   onLayoutChange(layout) {
@@ -384,7 +447,7 @@ class Widgets extends Component {
   }
 
   mobileLayout(layout) {
-      return layout.map((l) => {
+      return layout.map(l => {
           let i = Object.assign({}, l);
           i.x = 0;
           return i;
@@ -392,12 +455,83 @@ class Widgets extends Component {
   }
 
   render() {
+    if(this.state.user === undefined) {
+        return (
+            <Modal show={true}>
+                <Form>
+                    <Modal.Header><Modal.Title>Login required</Modal.Title></Modal.Header>
+                    <Modal.Body>
+                          {this.state.loginError && (
+                              <Alert bsStyle="danger">
+                                <h3>Oh snap!</h3>
+                                <p>{this.state.loginError.message}</p>
+                              </Alert>
+                          )}
+                          <FieldGroup
+                              id="username"
+                              label="Username"
+                              type="text"
+                              value={this.state.username}
+                              onChange={e => this.setState({username: e.target.value})}
+                              placeholder="Username" />
+                          <FieldGroup
+                              id="password"
+                              label="Password"
+                              type="password"
+                              value={this.state.password}
+                              onChange={e => this.setState({password: e.target.value})}
+                              placeholder="Password" />
+                    </Modal.Body>
+                    <Modal.Footer>
+                        <Button bsStyle="primary" type="submit" onClick={e => {
+                          e.preventDefault();
+                          fetch(BASE_API_URL + '/login', {
+                              method: 'post',
+                              headers: {
+                                  'Content-Type': 'application/json',
+                                  'Accept': 'application/json'
+                              },
+                              body: JSON.stringify({
+                                  username: this.state.username,
+                                  password: this.state.password
+                              })
+                          }).then(checkStatus)
+                          .then(parseJSON)
+                          .then(data => {
+                              this.setState({
+                                  user: {token: data.token, id: data.id, username: this.state.username},
+                                  username: undefined, password: undefined,
+                                  loginError: undefined,
+                              });
+                              setCookie('user', JSON.stringify({token: data.token, id: data.id, username: this.state.username}), 10);
+                              this.loadGrid();
+                          })
+                          .catch(error => this.setState({loginError: error}));
+                        }}>Sign in</Button>
+                    </Modal.Footer>
+                </Form>
+            </Modal>
+        )
+    }
+
     let layout = this.state.widgets;
     let mobLayout = this.mobileLayout(layout);
-    //console.log(layout);
+    let alerts = [];
+    if(this.state.gridSaved) {
+        alerts.push(<Alert bsStyle="success">Layout saved</Alert>);
+        setTimeout(() => this.setState({gridSaved: null}), 5 * 1000)
+    }
+    if(this.state.gridSaveError) {
+        alerts.push(<Alert bsStyle="danger">Layout not saved !! {this.state.gridSaveError.message}</Alert>);
+        setTimeout(() => this.setState({gridSaveError: null}), 5 * 1000)
+    }
+    if(this.state.widgetsError) {
+        alerts.push(<Alert bsStyle="danger">Error loading widgets: {this.state.widgetsError.message}</Alert>);
+        setTimeout(() => this.setState({widgetsError: null}), 5 * 1000)
+    }
     return (
         <div className="container">
-
+          {alerts.map(a => <div>{a}</div>)}
           <ResponsiveReactGridLayout className="layout"
                                      rowHeight={30} measureBeforeMount={false}
                                      cols={{lg: 12, md: 10, sm: 6, xs: 4, xxs: 2}}
@@ -410,62 +544,39 @@ class Widgets extends Component {
           <ButtonToolbar>
             <Button bsStyle="primary" onClick={this.onAddItem}>Add Item</Button>
             <Button bsStyle="primary" onClick={this.onSaveGrid}>Save Grid</Button>
+            <Button bsStyle="primary" onClick={this.loadGrid}>Reload Grid</Button>
             <Button bsStyle="primary" onClick={() => {
-                $.ajax({
-                    url: BASE_API_URL + '/logout',
+                fetch(BASE_API_URL + '/logout', {
                     method: 'get',
-                    contentType: 'application/json',
-                    xhrFields: {withCredentials: true},
-                    context: this
-                }).done(function(){
-                    this.setState({username: undefined, password: undefined, showLogin: true, errorText: undefined});
+                    headers: {
+                        'Authorization': 'Bearer ' + this.state.user.token
+                    }
+                }).then(checkStatus)
+                .then(() => {
+                    this.setState({user: undefined});
+                    setCookie("user", null, 10);
                 })
+                .catch(console.error);
             }}>Logout</Button>
           </ButtonToolbar>
 
-          <Modal show={this.state.showLogin}>
-              <Form>
-                  <Modal.Header><Modal.Title>Login required</Modal.Title></Modal.Header>
-                  <Modal.Body>
-                      {this.state.errorText && (
-                          <Alert bsStyle="danger">
-                            <h3>Oh snap!</h3>
-                            <p>{this.state.errorText}</p>
-                          </Alert>
-                      )}
-                      <FieldGroup id="username" label="Username" type="text" value={this.state.username} onChange={(e) => {this.setState({username: e.target.value})}} placeholder="Username" />
-                      <FieldGroup id="password" label="Password" type="password" value={this.state.password} onChange={(e) => {this.setState({password: e.target.value})}} placeholder="Password" />
-                  </Modal.Body>
-              <Modal.Footer>
-                  <Button bsStyle="primary" type="submit" disabled={this.state.loging_in} onClick={e => {
-                      e.preventDefault();
-                      $.ajax({
-                          url: BASE_API_URL + '/login',
-                          method: 'post',
-                          contentType: 'application/json',
-                          servercontentType: 'json',
-                          //xhrFields: {withCredentials: true},
-                          context: this,
-                          data: JSON.stringify({username: this.state.username, password: this.state.password})
-                      }).done(function(resp){
-                          this.setState({loging_in: false, username: undefined, password: undefined, showLogin: false, errorText: undefined, user_id: resp.user_id});
-                          this.loadGrid();
-                      }).fail(function(){
-                          this.setState({loging_in: false, errorText: "Invalid credentials..."});
-                      })
-                      this.setState({loging_in: true});
-                  }}>Sign in</Button>
-              </Modal.Footer>
-              </Form>
-          </Modal>
-          <NewWidgetModal show={this.state.showAddWidget} user_id={this.state.user_id} onHide={dirty => {
-              dirty && this.loadGrid();
-              this.setState({showAddWidget: false});
-          }}/>
-          <UpdateWidgetModal show={this.state.showUpdateWidget} widget={this.state.widget} user_id={this.state.user_id} onHide={dirty => {
-              dirty && this.loadGrid();
-              this.setState({showUpdateWidget: false, widget: undefined});
-          }}/>
+          <NewWidgetModal
+              show={this.state.showAddWidget}
+              user_id={this.state.user.id}
+              onHide={dirty => {
+                  dirty && this.loadGrid();
+                  this.setState({showAddWidget: false});
+              }}
+              auth_token={this.state.user.token}/>
+          <UpdateWidgetModal
+              show={this.state.showUpdateWidget}
+              widget={this.state.widget}
+              user_id={this.state.user.id}
+              onHide={dirty => {
+                  dirty && this.loadGrid();
+                  this.setState({showUpdateWidget: false, widget: undefined});
+              }}
+              auth_token={this.state.user.token}/>
         </div>
     );
   }

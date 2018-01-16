@@ -1,70 +1,106 @@
-"""
-"""
-
 __version__ = '0.0.1'
 
-import os
-import logging
-from logging.handlers import RotatingFileHandler
+import asyncio
+import logging.config
+from jinja2 import PackageLoader, Environment
 from urllib.parse import urlparse
 
-from flask import Flask, request, abort, redirect
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_url
+from aiohttp import web
+
+@web.middleware
+async def handle_cors(request, handler):
+    resp = await handler(request)
+    DEBUG = True
+
+    if hasattr(request, 'referrer'):
+        refer = urlparse(request.referrer)
+    origin = '*' if not getattr(request, 'referrer', None) or DEBUG is True else f'{refer.scheme}://{refer.netloc}'
+    resp.headers["Access-Control-Allow-Origin"] = origin
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Set-Cookie, Authorization"
+    resp.headers["Access-Control-Allow-Credentials"] = "true"
+    resp.headers["Access-Control-Allow-Methods"] = "POST, GET, PUT, OPTIONS, DELETE, CREATE"
+    return resp
 
 
-app = Flask(__name__, '/static/')
-app.config.from_object(os.environ['APP_SETTINGS'])
-
-# configure the database
-db = SQLAlchemy(app)
-
-# configure flask-login
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-
-# configure logging
-#handler = RotatingFileHandler(app.config.get('LOG_PATH', '/var/log/landscape.log'), maxBytes=30 * 1024 * 1024, backupCount=1)
-handler = app.config.get('LOG_HANDLER', logging.StreamHandler())
-handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s : %(message)s')
-handler.setFormatter(formatter)
-app.logger.addHandler(handler)
-app.logger.setLevel(logging.DEBUG if app.config.get('DEBUG', False) else logging.INFO)
-logger = logging.getLogger('werkzeug')
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
-
-@app.after_request
-def no_cors(response):
-    """
-    Deactivate CORS.
-    Accept all hosts in DEBUG mode. Accept all hosts without credentials otherwise.
-    """
-    refer = urlparse(request.referrer)
-    origin = '*' if not request.referrer or not app.config.get('DEBUG', False) else f'{refer.scheme}://{refer.netloc}'
-    response.headers["Access-Control-Allow-Origin"] = origin
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Set-Cookie"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "POST, GET, PUT, OPTIONS, DELETE, CREATE"
-    return response
+def setup_logging():
+    config = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'standard': {
+                'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+            },
+        },
+        'handlers': {
+            'default': {
+                'level': 'INFO',
+                'formatter': 'standard',
+                'class': 'logging.StreamHandler',
+            },
+        },
+        'loggers': {
+            '': {
+                'handlers': ['default'],
+                'level': 'INFO',
+                'propagate': True
+            },
+            'aiohttp': {
+                'handlers': ['default'],
+                'level': 'INFO',
+                'propagate': False
+            },
+        }
+    }
+    logging.config.dictConfig(config)
 
 
-@login_manager.unauthorized_handler
-def unauthorized_handler():
-    """
-    Overrides the default handler to avoid redirecting when using the API.
-    """
-    if '/api/' in request.url:
-        return abort(401)
-    else:
-        return redirect(login_url(login_manager.login_view, request.url))
+def setup_template(app):
+    app['jinja_env'] = Environment(loader=PackageLoader('landscape', 'templates'), enable_async=True)
 
 
-# time to import routes
-import landscape.controller
-import landscape.views
-import landscape.api
-import landscape.tasks
+def setup_routes(app):
+    import os.path
+    app.router.add_static('/static/',
+                          os.path.join(os.path.abspath(os.path.dirname(__file__)), '../static/')
+    )
+
+    from landscape.views import index, widgets, register
+    app.router.add_get('/', index)
+    app.router.add_get('/user/widgets', widgets)
+    app.router.add_post('/register', register)
+
+    from landscape.api import api_login, api_logout, api_widget, api_widget_item, api_widgets, empty_body
+    app.router.add_post('/api/v01/login', api_login)
+    app.router.add_route('OPTIONS', '/api/v01/login', empty_body)
+    app.router.add_get('/api/v01/logout', api_logout)
+    app.router.add_route('OPTIONS', '/api/v01/logout', empty_body)
+    app.router.add_get('/api/v01/user/{user_id}/widget/{widget_id}', api_widget, name='api_widget')
+    app.router.add_route('OPTIONS', '/api/v01/user/{user_id}/widget/{widget_id}', empty_body)
+    app.router.add_post('/api/v01/user/{user_id}/widget/{widget_id}', api_widget)
+    app.router.add_delete('/api/v01/user/{user_id}/widget/{widget_id}', api_widget)
+    app.router.add_post('/api/v01/user/{user_id}/widget/{widget_id}/item/{item_id}', api_widget_item)
+    app.router.add_route('OPTIONS', '/api/v01/user/{user_id}/widget/{widget_id}/item/{item_id}', empty_body)
+    app.router.add_get('/api/v01/user/{user_id}/widgets', api_widgets)
+    app.router.add_route('OPTIONS', '/api/v01/user/{user_id}/widgets', empty_body)
+    app.router.add_put('/api/v01/user/{user_id}/widgets', api_widgets)
+    app.router.add_post('/api/v01/user/{user_id}/widgets', api_widgets)
+
+
+def setup_database(app):
+    from landscape.controller import DatabaseHandler
+    app['db'] = DatabaseHandler.create_connection('./app.db')
+
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    app = web.Application(debug=False, loop=loop, middlewares=[handle_cors, ],)
+
+    setup_logging()
+    setup_template(app)
+    setup_routes(app)
+    setup_database(app)
+
+    from landscape.tasks import running_bg_jobs
+    running_bg_jobs(app['db'])
+
+    web.run_app(app, host='0.0.0.0', port=5000)

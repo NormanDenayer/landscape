@@ -1,7 +1,6 @@
-flask
-flask-sqlalchemy
-flask-login
 feedparser
 lxml
 aiohttp
 pytz
+jinja2
+yarl==0.18.0
