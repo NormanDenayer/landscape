@@ -1,6 +1,6 @@
 feedparser
 lxml
-aiohttp
+aiohttp==2.3.7
 pytz
 jinja2
 yarl==0.18.0
