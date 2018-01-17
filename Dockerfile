@@ -17,6 +17,7 @@ RUN set -x && \
     rm -vrf ~/.cache/pip
 
 RUN mkdir /data && touch /data/app.db
+ENV LANDSCAPE_DB /data/app.db
 
 CMD ["python3", "-m", "landscape.__init__"]
 EXPOSE 5000

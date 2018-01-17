@@ -1,5 +1,6 @@
 __version__ = '0.0.1'
 
+import os
 import asyncio
 import logging.config
 from jinja2 import PackageLoader, Environment
@@ -88,7 +89,7 @@ def setup_routes(app):
 
 def setup_database(app):
     from landscape.controller import DatabaseHandler
-    app['db'] = DatabaseHandler.create_connection('./app.db')
+    app['db'] = DatabaseHandler.create_connection(os.environ.get('LANDSCAPE_DB', './app.db'))
 
 
 if __name__ == '__main__':
