@@ -13,6 +13,9 @@ import FormGroup from 'react-bootstrap/lib/FormGroup';
 import HelpBlock from 'react-bootstrap/lib/HelpBlock';
 import ControlLabel from 'react-bootstrap/lib/ControlLabel';
 import Alert from 'react-bootstrap/lib/Alert';
+import Table from 'react-bootstrap/lib/Table';
+
+import {Bar} from 'react-chartjs-2';
 
 import update from 'react-addons-update';
 import './widgets.css';
@@ -46,6 +49,138 @@ export function checkStatus(response) {
     error.response = response;
     throw error
   }
+}
+
+class WidgetMeteo extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            content: undefined, content_error: undefined,
+        };
+        this.loadContent = this.loadContent.bind(this);
+    }
+
+    loadContent() {
+        fetch(API_URL_PREFIX + this.props.data.url, {
+            method: 'get',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer ' + this.props.auth_token
+            }
+        }).then(checkStatus)
+        .then(parseJSON)
+        .then(data => {
+            this.setState({content_error: undefined, content: JSON.parse(data.widget.content), lastUpdate: data.widget.updated_on});
+            setTimeout(() => this.loadContent(true), 5 * 60 * 1000);
+        })
+        .catch(error => {
+            console.error(error);
+            this.setState({content_error: error});
+            setTimeout(() => this.loadContent(true), 15 * 60 * 1000);
+        });
+    }
+
+    componentDidMount() {
+        this.loadContent();
+    }
+
+    render() {
+        if(this.state.content === undefined) {
+            return (
+            <div className="container-fluid" style={{height: "inherit"}}>
+                <Panel header="Loading..." bsStyle="info">
+                    <div className="container-fluid" />
+                </Panel>
+            </div>
+            )
+        }
+
+        if(this.state.content_error !== undefined) {
+            return (
+            <div className="container-fluid" style={{height: "inherit"}}>
+                <Panel header="Loading..." bsStyle="info">
+                    <div className="container-fluid">
+                        <Alert bsStyle="danger" >{this.state.content_error.message}</Alert>
+                    </div>
+                </Panel>
+            </div>
+            )
+        }
+
+        let timestamps = [];
+        for (let i = 0; i <= this.state.content.rain_risk_levels.length; i++) {
+            timestamps.push("" + i * 5 + "min");
+        }
+
+        const data = {
+          labels: timestamps,
+          datasets: [
+              {
+                  //label: 'Rain Risk Level',
+                  backgroundColor: 'rgba(255,99,132,0.2)',
+                  //borderColor: 'rgba(255,99,132,1)',
+                  //borderWidth: 1,
+                  hoverBackgroundColor: 'rgba(255,99,132,0.4)',
+                  hoverBorderColor: 'rgba(255,99,132,1)',
+                  data: this.state.content.rain_risk_levels.map(l => ({y: l.y, label: l.label})),
+              }
+          ]
+        };
+
+        const p = this.state.content.previsions;
+        return (<div className="container-fluid" style={{height: "inherit"}}>
+          <Panel header={"Meteo for " + this.state.content.city + " (" + this.state.lastUpdate + ")"} bsStyle="info">
+              <div className="container-fluid" onMouseDown={ e => e.stopPropagation() }>
+                  <Bar
+                      options={{
+                          tooltips: {
+                              callbacks: {
+                                  label: (item, data) => data.datasets[0].data[item.index].label
+                              }
+                          },
+                          legend: {display: false},
+                          scales: {
+                              yAxes: [{
+                                  ticks: {
+                                      beginAtZero: 0,
+                                      max: 5
+                                  }
+                              }]
+                          }
+                      }}
+                      height={50}
+                      width={150}
+                      data={data} />
+                  <hl />
+                  <i>Previsions</i>
+                  <Table>
+                      <thead>
+                          <tr>
+                              <th>Day</th>
+                              <th>Time</th>
+                              <th>Sum.</th>
+                              <th>Temp.</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                      {
+                          Object.keys(p).map(day => (
+                              Object.keys(p[day]).map(start_slice => (
+                                  <tr>
+                                      <td>{day}</td>
+                                      <td>{start_slice}</td>
+                                      <td>{p[day][start_slice][1]}</td>
+                                      <td>{p[day][start_slice][0]}</td>
+                                  </tr>
+                              ))
+                          ))
+                      }
+                      </tbody>
+                  </Table>
+              </div>
+          </Panel>
+      </div>)
+    }
 }
 
 class Widget extends Component {
@@ -110,9 +245,8 @@ class Widget extends Component {
   render() {
       if(this.state.items === null) {
           return (<div className="container-fluid" style={{height: "inherit"}}>
-              <Panel header='*none*' bsStyle="info">
-                  <div className="container-fluid">
-                  </div>
+              <Panel header='Loading...' bsStyle="info">
+                  <div className="container-fluid" />
               </Panel>
           </div>);
       }
@@ -173,6 +307,8 @@ class NewWidgetModal extends Component {
         this.onTitle = this.onTitle.bind(this);
         this.onUsername = this.onUsername.bind(this);
         this.onPassword = this.onPassword.bind(this);
+        this.onCity = this.onCity.bind(this);
+        this.onZip = this.onZip.bind(this);
         this.onSubmit = this.onSubmit.bind(this);
     }
 
@@ -203,6 +339,14 @@ class NewWidgetModal extends Component {
         this.setState({widget: update(this.state.widget, {content: {password: {$set: e.target.value}}})})
     }
 
+    onCity(e) {
+        this.setState({widget: update(this.state.widget, {content: {city: {$set: e.target.value}}})})
+    }
+
+    onZip(e) {
+        this.setState({widget: update(this.state.widget, {content: {zip_code: {$set: e.target.value}}})})
+    }
+
     onSubmit(e) {
         e.preventDefault();
 
@@ -228,6 +372,8 @@ class NewWidgetModal extends Component {
             if(this.state.diff_widget.type) widget.type = this.state.diff_widget.type;
             if(this.state.diff_widget.content.username) widget.content.username = this.state.diff_widget.content.username;
             if(this.state.diff_widget.content.password) widget.content.password = this.state.diff_widget.content.password;
+            if(this.state.diff_widget.content.city) widget.content.city = this.state.diff_widget.content.city;
+            if(this.state.diff_widget.content.zip_code) widget.content.zip_code = this.state.diff_widget.content.zip_code;
             widget.url = widget.uri;
             create_flag = false;
         }
@@ -247,11 +393,16 @@ class NewWidgetModal extends Component {
             <FieldGroup id="username" label="Username" type="text" value={widget.content.username} onChange={this.onUsername} />,
             <FieldGroup id="password" label="Password" type="password" value={widget.content.password} onChange={this.onPassword} />
         ];
+        const meteo_fields = [
+            <FieldGroup id="city" label="City" type="text" value={widget.content.city} onChange={this.onCity} />,
+            <FieldGroup id="zip_code" label="Zip" type="text" value={widget.content.zip_code} onChange={this.onZip} />,
+        ];
         const TYPES = [
             {value:1, name:'Feed', fields: default_fields},
-            {value:2, name:'Link', fields: default_fields},
-            {value:3, name:'Todo', fields: default_fields},
+            //{value:2, name:'Link', fields: default_fields},
+            //{value:3, name:'Todo', fields: default_fields},
             {value:4, name:'Espace Famille', fields: credential_fields},
+            {value:5, name:'Meteo France', fields: meteo_fields}
         ];
         const TYPE = TYPES.find(t => t.value === widget.type);
         return <Modal show={this.props.show}>
@@ -299,6 +450,14 @@ class UpdateWidgetModal extends NewWidgetModal {
 
     onPassword(e) {
         this.setState({diff_widget: update(this.state.widget, {content: {password: {$set: e.target.value}}})})
+    }
+
+    onCity(e) {
+        this.setState({diff_widget: update(this.state.widget, {content: {city: {$set: e.target.value}}})})
+    }
+
+    onZip(e) {
+        this.setState({diff_widget: update(this.state.widget, {content: {zip_code: {$set: e.target.value}}})})
     }
 
     onSubmit(e) {
@@ -414,8 +573,16 @@ class Widgets extends Component {
   }
 
   createElement(e){
+      let widget = null;
+      switch(e.type) {
+          case 'METEO_FRANCE':
+              widget = <WidgetMeteo key={e.widget_id} data={e} auth_token={this.state.user.token} />;
+              break;
+          default:
+              widget = <Widget key={e.widget_id} data={e} auth_token={this.state.user.token} />
+      }
       return <div key={e.widget_id}>
-          <Widget key={e.widget_id} data={e} auth_token={this.state.user.token} />
+          {widget}
           <span className="remove glyphicon glyphicon-erase" onClick={this.onRemoveItem.bind(this, e)} />
           <span className="update glyphicon glyphicon-pencil" onClick={this.onUpdateItem.bind(this, e)} />
       </div>
@@ -531,7 +698,7 @@ class Widgets extends Component {
     }
     return (
         <div className="container">
-          {alerts.map(a => <div>{a}</div>)}
+          {alerts.map((a, i) => <div key={i}>{a}</div>)}
           <ResponsiveReactGridLayout className="layout"
                                      rowHeight={30} measureBeforeMount={false}
                                      cols={{lg: 12, md: 10, sm: 6, xs: 4, xxs: 2}}

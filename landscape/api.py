@@ -149,6 +149,21 @@ async def api_widgets(request, user):
                 }),
                 **coord
             )
+        elif new_widget['type'] == 5:
+            widget = Widget(
+                type='METEO_FRANCE',
+                user_id=user_id,
+                uri='',
+                title='Meteo',
+                refresh_freq=new_widget.get('freq', 5*60),
+                content=json.dumps({
+                    'city': new_widget['content'].get('city'),
+                    'zip_code': new_widget['content'].get('zip_code'),
+                    'previsions': [],
+                    'rain_risk_level': [],
+                }),
+                **coord
+            )
         else:
             return web.Response(status=422)
 

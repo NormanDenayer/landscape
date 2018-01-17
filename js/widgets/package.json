@@ -4,9 +4,11 @@
   "private": true,
   "dependencies": {
     "babel-polyfill": "^6.26.0",
+    "chart.js": "^2.7.1",
     "react": "^15.6.2",
     "react-addons-update": "^15.6.2",
     "react-bootstrap": "^0.31.5",
+    "react-chartjs-2": "^2.7.0",
     "react-dom": "^15.6.2",
     "react-grid-layout": "^0.14.7"
   },

@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 import secrets
 import feedparser
+import collections
 
 from pytz import timezone
 from lxml import html, etree
@@ -163,6 +164,52 @@ async def refresh_feed(widget, *, db, parser):
     logger.debug('widget %r update with %r', widget, content)
 
 
+async def refresh_meteo_france(widget, db):
+    url = 'http://www.meteofrance.com/previsions-meteo-france'
+    content = json.loads(widget.content) if widget.content else {}
+
+    # 1. get the previsions for the coming days
+    async with aiohttp.ClientSession() as s:
+        r = await s.get(f'{url}/{content["city"].lower()}/{content["zip_code"]}')
+        assert r.status == 200
+
+        text = await r.text()
+        root = html.fromstring(text)
+        match = re.search(r'codeInsee: "(\d+)"', text)
+        code_insee = match.groups()[0] if match is not None else None
+
+        previsions = root.find_class('prevision-horaire')
+        previsions_details = collections.defaultdict(dict)
+
+        for prev in previsions:
+            for i, time_slice in enumerate(prev.findall('li')):
+                if time_slice.findtext('div/h3') is None or time_slice.findtext('button/time') is None:
+                    continue
+                day = time_slice.findtext('div/h3').strip()
+                start_slice = time_slice.findtext('button/time').strip()
+
+                summary = time_slice.find_class('day-summary-label')[0].text.strip()
+                temperature = time_slice.find_class('day-summary-temperature')[0].text.strip()
+
+                previsions_details[day][start_slice] = (summary, temperature)
+        content['previsions'] = previsions_details
+
+    # 2. get the raining risk level
+    if code_insee is not None:
+        async with aiohttp.ClientSession() as s:
+            url = 'http://www.meteofrance.com/mf3-rpc-portlet/rest/pluie/' + str(code_insee)
+            r = await s.get(url)
+            assert r.status == 200
+            response = await r.json()
+            content['niveauPluieNext'] = response.get('niveauPluieNext')
+            content['rain_risk_levels'] = [{'y': e['niveauPluie'], 'label': e['niveauPluieText']}
+                                           for e in response['dataCadran']]
+
+    widget.content = json.dumps(content)
+    db.update_widget(widget)
+    logger.debug('widget %r update with %r', widget, content)
+
+
 async def refresh_espace_famille(widget, db):
     url = 'https://www.espace-citoyens.net/bordeaux/espace-citoyens/'
     content = json.loads(widget.content) if widget.content else {}
@@ -222,6 +269,8 @@ async def refresh_widgets(db):
                     parser = general_feed_parser
                 logger.info(f'refreshing {widget.title}')
                 fut = refresh_feed(widget, parser=parser, db=db)
+            elif widget.type == 'METEO_FRANCE':
+                fut = refresh_meteo_france(widget, db)
             else:
                 continue
             futures.append(fut)
