@@ -108,7 +108,7 @@ class WidgetMeteo extends Component {
         }
 
         let timestamps = [];
-        for (let i = 0; i <= this.state.content.rain_risk_levels.length; i++) {
+        for (let i = 1; i <= this.state.content.rain_risk_levels.length; i++) {
             timestamps.push("" + i * 5 + "min");
         }
 
@@ -116,10 +116,7 @@ class WidgetMeteo extends Component {
           labels: timestamps,
           datasets: [
               {
-                  //label: 'Rain Risk Level',
                   backgroundColor: 'rgba(255,99,132,0.2)',
-                  //borderColor: 'rgba(255,99,132,1)',
-                  //borderWidth: 1,
                   hoverBackgroundColor: 'rgba(255,99,132,0.4)',
                   hoverBorderColor: 'rgba(255,99,132,1)',
                   data: this.state.content.rain_risk_levels.map(l => ({y: l.y, label: l.label})),
@@ -142,7 +139,7 @@ class WidgetMeteo extends Component {
                           scales: {
                               yAxes: [{
                                   ticks: {
-                                      beginAtZero: 0,
+                                      min: 1,
                                       max: 5
                                   }
                               }]
