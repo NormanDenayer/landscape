@@ -26,6 +26,7 @@ const ResponsiveReactGridLayout = WidthProvider(Responsive);
 
 const API_URL_PREFIX = process.env.NODE_ENV === 'production'?window.location.origin:'http://127.0.0.1:5000';
 const BASE_API_URL = API_URL_PREFIX + '/api/v01';
+const MAX_LINKS = 10;
 
 
 export function parseJSON(response) {
@@ -254,25 +255,35 @@ class Widget extends Component {
                   {this.state.items.map((item, i) => {
                       let image = '';
                       let image_desc = '';
-                      let pub_time = new Date(item.at);
 
                       if(item.picture) {
                         image = (<img style={{float:"left", marginBottom:"2px"}} width="40" src={item.picture} alt="" />);
                         image_desc = (<img style={{float:"left", marginRight:"2px", marginBottom:"2px"}} width="100" src={item.picture} alt="" />);
                       }
-                      let description = (<div className="media">
-                          {image_desc}
-                          <p>{item.description}</p>
-                          <p>Published at: {pub_time.toString()}</p>
-                        </div>);
-                      let title = (<a href={item.link} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title}</a>);
+                      let description = '';
+                      if(item.description) {
+                          description = (<div className="media">
+                              {image_desc}
+                              <p>{item.description}</p>
+                              <p>Published at: {item.at && new Date(item.at).toString()}</p>
+                          </div>)
+                      } else if(item.note) {
+                          description = (<div className="media">
+                              <p>{item.note}</p>
+                          </div>)
+                      }
+                      const no_id =  item.id === undefined;
+                      if(no_id) {
+                          item.id = Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 32);
+                      }
+                      let title = (<a href={item.link || item.url} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title || item.url}</a>);
                       let popover = (<Popover id={'popover-' + item.id} title={title}>{description}</Popover>);
                       return (<div className="row" key={i}>
-                        <div className={"span4 " + ((item.read)?"read":"")}>
+                        <div className={"span4 " + (item.read?"read":"")}>
                             <p>
                                 {image}
                                 <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
-                                    <a onClick={() => this.onItemClick(item)}>{item.title}</a>
+                                    <a onClick={() => !no_id && this.onItemClick(item)}>{item.title || item.url}</a>
                                 </OverlayTrigger>
                             </p>
                         </div>
@@ -297,7 +308,7 @@ function FieldGroup({ id, label, help, ...props }) {
 class NewWidgetModal extends Component {
     constructor(props) {
         super(props);
-        this.state = {widget: {type: 1, title: "", url: "", content: {}}, diff_widget: {content: {}}};
+        this.state = {widget: this.props.widget || {type: "FEED", title: "", url: "", content: {}}};
         this.onHide = this.onHide.bind(this);
         this.onChangeType = this.onChangeType.bind(this);
         this.onUrl = this.onUrl.bind(this);
@@ -311,13 +322,13 @@ class NewWidgetModal extends Component {
 
     onHide(dirty) {
         if(dirty === true) {
-            this.setState({errorText: undefined, widget: {type: "1", title: "", url: "", content: {}}, diff_widget: {content: {}}});
+            this.setState({errorText: undefined, widget: {type: "FEED", title: "", url: "", content: {}}});
         }
         this.props.onHide && this.props.onHide(dirty);
     }
 
     onChangeType(e){
-        this.setState({widget: update(this.state.widget, {type: {$set: parseInt(e.target.value, 10)}})})
+        this.setState({widget: update(this.state.widget, {type: {$set: e.target.value}})})
     }
 
     onUrl(e){
@@ -344,6 +355,14 @@ class NewWidgetModal extends Component {
         this.setState({widget: update(this.state.widget, {content: {zip_code: {$set: e.target.value}}})})
     }
 
+    onLinkUrl(i, e) {
+        this.setState({widget: update(this.state.widget, {content: {items: {[i]: {url: {$set: e.target.value}}}}})})
+    }
+
+    onLinkNote(i, e) {
+        this.setState({widget: update(this.state.widget, {content: {items: {[i]: {note: {$set: e.target.value}}}}})})
+    }
+
     onSubmit(e) {
         e.preventDefault();
 
@@ -360,8 +379,9 @@ class NewWidgetModal extends Component {
     }
 
     render() {
-        let create_flag = true;
-        let widget = this.state.widget;
+        let create_flag = this.props.widget === undefined;
+        let {widget} = this.state;
+        /*
         if(this.state.widget.url === "" && this.props.widget) {
             widget = Object.assign({}, this.props.widget);
             if(this.state.diff_widget.title) widget.title = this.state.diff_widget.title;
@@ -374,6 +394,13 @@ class NewWidgetModal extends Component {
             widget.url = widget.uri;
             create_flag = false;
         }
+        */
+        //console.log(widget);
+        //console.log(this.state.widget);
+        if(widget.content === undefined) {
+            widget.content = {}
+        }
+
         let alert = '';
         if(this.state.errorText) {
             alert = <Alert bsStyle="danger">
@@ -386,6 +413,9 @@ class NewWidgetModal extends Component {
             <FieldGroup id="title" label="Title (optional)" type="text" value={widget.title} onChange={this.onTitle} placeholder="Title" />,
             <FieldGroup id="url" label="Url" type="text" value={widget.url} onChange={this.onUrl} placeholder="Url" />
         ];
+        const only_title = [
+            <FieldGroup id="title" label="Title (optional)" type="text" value={widget.title} onChange={this.onTitle} placeholder="Title" />
+        ];
         const credential_fields = [
             <FieldGroup id="username" label="Username" type="text" value={widget.content.username} onChange={this.onUsername} />,
             <FieldGroup id="password" label="Password" type="password" value={widget.content.password} onChange={this.onPassword} />
@@ -395,13 +425,16 @@ class NewWidgetModal extends Component {
             <FieldGroup id="zip_code" label="Zip" type="text" value={widget.content.zip_code} onChange={this.onZip} />,
         ];
         const TYPES = [
-            {value:1, name:'Feed', fields: default_fields},
-            //{value:2, name:'Link', fields: default_fields},
+            {value:'FEED', name:'Feed', fields: default_fields},
+            {value:'LINKS', name:'Links', fields: only_title},
             //{value:3, name:'Todo', fields: default_fields},
-            {value:4, name:'Espace Famille', fields: credential_fields},
-            {value:5, name:'Meteo France', fields: meteo_fields}
+            {value:'ESPACE_FAMILLE', name:'Espace Famille', fields: credential_fields},
+            {value:'METEO_FRANCE', name:'Meteo France', fields: meteo_fields}
         ];
         const TYPE = TYPES.find(t => t.value === widget.type);
+        if(widget.type === 'LINKS' && widget.content.items === undefined) {
+            widget.content.items = [];
+        }
         return <Modal show={this.props.show}>
               <Modal.Header>
                   <Modal.Title>{create_flag?"New widget":"Edit " + widget.title}</Modal.Title>
@@ -419,6 +452,24 @@ class NewWidgetModal extends Component {
                   {
                       TYPE && TYPE.fields.map((f, i) => <div key={i}>{f}</div>)
                   }
+                  {
+                      widget.type === 'LINKS' && widget.content.items !== undefined && widget.content.items.map((u, i) => (
+                          <FormGroup key={i}>
+                              <FieldGroup label="Url" type="text" value={u.url}
+                                          onChange={(e) => this.onLinkUrl(i, e)}/>
+                              <FieldGroup label="Note" type="text" value={u.note}
+                                          onChange={(e) => this.onLinkNote(i, e)}/>
+                              <Button onClick={() => this.setState({widget: update(this.state.widget, {content: {items: {$splice: [[i]]}}})})}>Delete</Button>
+                          </FormGroup>
+                      ))
+                  }
+                  {
+                      widget.type === 'LINKS' && widget.content.items.length < MAX_LINKS && (
+                          <div>
+                              <Button onClick={() => this.setState({widget: update(this.state.widget, {content: {items: {$push: [{url: '', note: ''}]}}})})}>Add Link</Button>
+                          </div>
+                      )
+                  }
               </Modal.Body>
               <Modal.Footer>
                   <Button bsStyle="primary" onClick={this.onSubmit}>{create_flag?"Add":"Update"}</Button>
@@ -429,32 +480,20 @@ class NewWidgetModal extends Component {
 }
 
 class UpdateWidgetModal extends NewWidgetModal {
-    onChangeType(e){
-        this.setState({diff_widget: update(this.state.diff_widget, {type: {$set: e.target.value}})})
-    }
-
-    onUrl(e){
-        this.setState({diff_widget: update(this.state.diff_widget, {url: {$set: e.target.value}})})
-    }
-
-    onTitle(e){
-        this.setState({diff_widget: update(this.state.diff_widget, {title: {$set: e.target.value}})})
-    }
-
-    onUsername(e) {
-        this.setState({diff_widget: update(this.state.widget, {content: {username: {$set: e.target.value}}})})
-    }
-
-    onPassword(e) {
-        this.setState({diff_widget: update(this.state.widget, {content: {password: {$set: e.target.value}}})})
-    }
-
-    onCity(e) {
-        this.setState({diff_widget: update(this.state.widget, {content: {city: {$set: e.target.value}}})})
-    }
-
-    onZip(e) {
-        this.setState({diff_widget: update(this.state.widget, {content: {zip_code: {$set: e.target.value}}})})
+    componentDidMount() {
+        fetch(API_URL_PREFIX + this.props.widget.url, {
+            method: 'get',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer ' + this.props.auth_token
+            }
+        }).then(checkStatus)
+        .then(parseJSON)
+        .then(data => {
+            data.widget.content = JSON.parse(data.widget.content);
+            if(data.widget.uri) data.widget.url = data.widget.uri;
+            this.setState({widget: data.widget});
+        }).catch(console.error);
     }
 
     onSubmit(e) {
@@ -580,8 +619,8 @@ class Widgets extends Component {
       }
       return <div key={e.widget_id}>
           {widget}
-          <span className="remove glyphicon glyphicon-erase" onClick={this.onRemoveItem.bind(this, e)} />
-          <span className="update glyphicon glyphicon-pencil" onClick={this.onUpdateItem.bind(this, e)} />
+          <span className="remove glyphicon glyphicon-erase" onClick={() => this.onRemoveItem(e)} />
+          <span className="update glyphicon glyphicon-pencil" onClick={() => this.onUpdateItem(e)} />
       </div>
   }
 
@@ -732,7 +771,8 @@ class Widgets extends Component {
                   this.setState({showAddWidget: false});
               }}
               auth_token={this.state.user.token}/>
-          <UpdateWidgetModal
+
+          {this.state.widget && <UpdateWidgetModal
               show={this.state.showUpdateWidget}
               widget={this.state.widget}
               user_id={this.state.user.id}
@@ -741,6 +781,7 @@ class Widgets extends Component {
                   this.setState({showUpdateWidget: false, widget: undefined});
               }}
               auth_token={this.state.user.token}/>
+          }
         </div>
     );
   }

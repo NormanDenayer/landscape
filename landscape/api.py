@@ -50,8 +50,14 @@ async def api_widget(request, user):
 
     if request.method == 'POST':  # update an individual widget
         content = await request.json()
+        content = content.get('widget')
+        if content is None:
+            return web.Response()
         widget.title = content.get('title', None) or widget.title
         widget.uri = content.get('uri', None) or widget.uri
+        widget_content = content.get('content')
+        if widget_content is not None and widget.type == 'LINKS':
+            widget.content = json.dumps(widget_content)
         request.app['db'].update_widget(widget)
 
     if request.method == 'DELETE':
@@ -126,7 +132,7 @@ async def api_widgets(request, user):
     if request.method == 'POST':
         coord = Widget.new_coordinates(request.app['db'].get_widgets(user_id))
         new_widget = content['widget']
-        if new_widget['type'] == 1:
+        if new_widget['type'] == 'FEED':
             widget = Widget(
                 type='FEED',
                 user_id=user_id,
@@ -135,7 +141,19 @@ async def api_widgets(request, user):
                 refresh_freq=new_widget.get('freq', 60),
                 **coord
             )
-        elif new_widget['type'] == 4:
+        elif new_widget['type'] == 'LINKS':
+            widget = Widget(
+                type='LINKS',
+                user_id=user_id,
+                uri='',
+                title=new_widget['title'],
+                refresh_freq=new_widget.get('freq', 60),
+                content=json.dumps({
+                    'items': new_widget.get('content', {}).get('items', []),
+                }),
+                **coord
+            )
+        elif new_widget['type'] == 'ESPACE_FAMILLE':
             widget = Widget(
                 type='ESPACE_FAMILLE',
                 user_id=user_id,
@@ -149,7 +167,7 @@ async def api_widgets(request, user):
                 }),
                 **coord
             )
-        elif new_widget['type'] == 5:
+        elif new_widget['type'] == 'METEO_FRANCE':
             widget = Widget(
                 type='METEO_FRANCE',
                 user_id=user_id,
