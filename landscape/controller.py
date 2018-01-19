@@ -140,7 +140,7 @@ class DatabaseHandler(object):
         with self.db:
             self.db.execute(
                 'insert into users (username, password, email, token) values (?, ?, ?, ?)',
-                (username, password, email, User.generate_token())
+                (username, User.encode_password(password), email, User.generate_token())
             )
 
     def auth_user(self, token):
