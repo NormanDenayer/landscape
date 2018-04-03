@@ -108,7 +108,7 @@ async def api_widgets(request, user):
         widgets = []
         for w in request.app['db'].get_widgets(user.user_id):
             d = w.as_dict(exclude=['content'])
-            d['url'] = str(request.app.router['api_widget'].url_for(user_id=user.user_id, widget_id=w.widget_id))
+            d['url'] = str(request.app.router['api_widget'].url_for(user_id=str(user.user_id), widget_id=str(w.widget_id)))
             widgets.append(d)
         return web.json_response({'widgets': widgets})
     # update the widgets (if PUT)

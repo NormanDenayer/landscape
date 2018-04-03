@@ -89,8 +89,13 @@ class WidgetMeteo extends Component {
         if(this.state.content === undefined) {
             return (
             <div className="container-fluid" style={{height: "inherit"}}>
-                <Panel header="Loading..." bsStyle="info">
-                    <div className="container-fluid" />
+                <Panel bsStyle="info">
+                    <Panel.Heading>
+                        Loading...
+                    </Panel.Heading>
+                    <Panel.Body>
+                        <div className="container-fluid" />
+                    </Panel.Body>
                 </Panel>
             </div>
             )
@@ -99,10 +104,15 @@ class WidgetMeteo extends Component {
         if(this.state.content_error !== undefined) {
             return (
             <div className="container-fluid" style={{height: "inherit"}}>
-                <Panel header="Loading..." bsStyle="info">
-                    <div className="container-fluid">
-                        <Alert bsStyle="danger" >{this.state.content_error.message}</Alert>
-                    </div>
+                <Panel bsStyle="info">
+                    <Panel.Heading>
+                        Loading...
+                    </Panel.Heading>
+                    <Panel.Body>
+                        <div className="container-fluid">
+                            <Alert bsStyle="danger" >{this.state.content_error.message}</Alert>
+                        </div>
+                    </Panel.Body>
                 </Panel>
             </div>
             )
@@ -127,55 +137,60 @@ class WidgetMeteo extends Component {
 
         const p = this.state.content.previsions;
         return (<div className="container-fluid" style={{height: "inherit"}}>
-          <Panel header={"Meteo for " + this.state.content.city + " (" + this.state.lastUpdate + ")"} bsStyle="info">
-              <div className="container-fluid" onMouseDown={ e => e.stopPropagation() }>
-                  <Bar
-                      options={{
-                          tooltips: {
-                              callbacks: {
-                                  label: (item, data) => data.datasets[0].data[item.index].label
-                              }
-                          },
-                          legend: {display: false},
-                          scales: {
-                              yAxes: [{
-                                  ticks: {
-                                      min: 1,
-                                      max: 5
+          <Panel bsStyle="info">
+              <Panel.Heading>
+                  {"Meteo for " + this.state.content.city + " (" + this.state.lastUpdate + ")"}
+              </Panel.Heading>
+              <Panel.Body>
+                  <div className="container-fluid" onMouseDown={ e => e.stopPropagation() }>
+                      <Bar
+                          options={{
+                              tooltips: {
+                                  callbacks: {
+                                      label: (item, data) => data.datasets[0].data[item.index].label
                                   }
-                              }]
-                          }
-                      }}
-                      height={50}
-                      width={150}
-                      data={data} />
-                  <hl />
-                  <i>Previsions</i>
-                  <Table>
-                      <thead>
-                          <tr>
-                              <th>Day</th>
-                              <th>Time</th>
-                              <th>Sum.</th>
-                              <th>Temp.</th>
-                          </tr>
-                      </thead>
-                      <tbody>
-                      {
-                          Object.keys(p).map(day => (
-                              Object.keys(p[day]).map(start_slice => (
-                                  <tr>
-                                      <td>{day}</td>
-                                      <td>{start_slice}</td>
-                                      <td>{p[day][start_slice][1]}</td>
-                                      <td>{p[day][start_slice][0]}</td>
-                                  </tr>
+                              },
+                              legend: {display: false},
+                              scales: {
+                                  yAxes: [{
+                                      ticks: {
+                                          min: 1,
+                                          max: 5
+                                      }
+                                  }]
+                              }
+                          }}
+                          height={50}
+                          width={150}
+                          data={data} />
+                      <br />
+                      <i>Previsions</i>
+                      <Table>
+                          <thead>
+                              <tr>
+                                  <th>Day</th>
+                                  <th>Time</th>
+                                  <th>Sum.</th>
+                                  <th>Temp.</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                          {
+                              Object.keys(p).map(day => (
+                                  Object.keys(p[day]).map((start_slice, i) => (
+                                      <tr key={i}>
+                                          <td>{day}</td>
+                                          <td>{start_slice}</td>
+                                          <td>{p[day][start_slice][1]}</td>
+                                          <td>{p[day][start_slice][0]}</td>
+                                      </tr>
+                                  ))
                               ))
-                          ))
-                      }
-                      </tbody>
-                  </Table>
-              </div>
+                          }
+                          </tbody>
+                      </Table>
+                  </div>
+              </Panel.Body>
           </Panel>
       </div>)
     }
@@ -243,53 +258,63 @@ class Widget extends Component {
   render() {
       if(this.state.items === null) {
           return (<div className="container-fluid" style={{height: "inherit"}}>
-              <Panel header='Loading...' bsStyle="info">
-                  <div className="container-fluid" />
+              <Panel bsStyle="info">
+                  <Panel.Heading>
+                      Loading...
+                  </Panel.Heading>
+                  <Panel.Body>
+                      <div className="container-fluid" />
+                  </Panel.Body>
               </Panel>
           </div>);
       }
 
       return (<div className="container-fluid" style={{height: "inherit"}}>
-          <Panel header={this.state.title || "<title>"} bsStyle="info">
-              <div className="container-fluid" onMouseDown={ e => e.stopPropagation() }>
-                  {this.state.items.map((item, i) => {
-                      let image = '';
-                      let image_desc = '';
+          <Panel bsStyle="info">
+              <Panel.Heading>
+                  {this.state.title || "<title>"}
+              </Panel.Heading>
+              <Panel.Body>
+                  <div className="container-fluid" onMouseDown={ e => e.stopPropagation() }>
+                      {this.state.items.map((item, i) => {
+                          let image = '';
+                          let image_desc = '';
 
-                      if(item.picture) {
-                        image = (<img style={{float:"left", marginBottom:"2px"}} width="40" src={item.picture} alt="" />);
-                        image_desc = (<img style={{float:"left", marginRight:"2px", marginBottom:"2px"}} width="100" src={item.picture} alt="" />);
-                      }
-                      let description = '';
-                      if(item.description) {
-                          description = (<div className="media">
-                              {image_desc}
-                              <p>{item.description}</p>
-                              <p>Published at: {item.at && new Date(item.at).toString()}</p>
+                          if(item.picture) {
+                            image = (<img style={{float:"left", marginBottom:"2px"}} width="40" src={item.picture} alt="" />);
+                            image_desc = (<img style={{float:"left", marginRight:"2px", marginBottom:"2px"}} width="100" src={item.picture} alt="" />);
+                          }
+                          let description = '';
+                          if(item.description) {
+                              description = (<div className="media">
+                                  {image_desc}
+                                  <p>{item.description}</p>
+                                  <p>Published at: {item.at && new Date(item.at).toString()}</p>
+                              </div>)
+                          } else if(item.note) {
+                              description = (<div className="media">
+                                  <p>{item.note}</p>
+                              </div>)
+                          }
+                          const no_id =  item.id === undefined;
+                          if(no_id) {
+                              item.id = Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 32);
+                          }
+                          let title = (<a href={item.link || item.url} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title || item.url}</a>);
+                          let popover = (<Popover id={'popover-' + item.id} title={title}>{description}</Popover>);
+                          return (<div className="row" key={i}>
+                            <div className={"span4 " + (item.read?"read":"")}>
+                                <p>
+                                    {image}
+                                    <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
+                                        <a onClick={() => !no_id && this.onItemClick(item)}>{item.title || item.url}</a>
+                                    </OverlayTrigger>
+                                </p>
+                            </div>
                           </div>)
-                      } else if(item.note) {
-                          description = (<div className="media">
-                              <p>{item.note}</p>
-                          </div>)
-                      }
-                      const no_id =  item.id === undefined;
-                      if(no_id) {
-                          item.id = Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 32);
-                      }
-                      let title = (<a href={item.link || item.url} target="_blank" onClick={() => this.refs['overlay-' + item.id].hide()}>{item.title || item.url}</a>);
-                      let popover = (<Popover id={'popover-' + item.id} title={title}>{description}</Popover>);
-                      return (<div className="row" key={i}>
-                        <div className={"span4 " + (item.read?"read":"")}>
-                            <p>
-                                {image}
-                                <OverlayTrigger ref={'overlay-' + item.id} trigger={['click']} placement="bottom" overlay={popover} rootClose>
-                                    <a onClick={() => !no_id && this.onItemClick(item)}>{item.title || item.url}</a>
-                                </OverlayTrigger>
-                            </p>
-                        </div>
-                      </div>)
-                  })}
-              </div>
+                      })}
+                </div>
+              </Panel.Body>
           </Panel>
       </div>)
   }
