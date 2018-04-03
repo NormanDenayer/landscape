@@ -586,7 +586,7 @@ class Widgets extends Component {
   }
 
   onRemoveItem(el){
-      let confirm_ = confirm('Are you sure you want to delete this widget?');
+      let confirm_ = window.confirm('Are you sure you want to delete this widget?');
       if(confirm_ !== true) {
           return
       }
